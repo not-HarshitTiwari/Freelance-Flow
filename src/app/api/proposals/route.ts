@@ -15,24 +15,31 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
+  console.log("PROFILE DATA:", JSON.stringify(profile));
+
   if (profile?.plan !== "pro") {
     return NextResponse.json({ error: "Upgrade to Pro to generate proposals." }, { status: 403 });
   }
 
   const { projectDescription, clientName, clientEmail, clientCompany, budget, timeline } = await request.json();
 
-  const senderName = profile.business_name || profile.full_name || "I";
-  const senderInfo = [
-    profile.business_name && `Business: ${profile.business_name}`,
-    profile.business_address && `Location: ${profile.business_address}`,
-    profile.gstin && `GSTIN: ${profile.gstin}`,
-  ].filter(Boolean).join("\n");
+  // Build sender info — only include fields that are actually set
+  const senderName = profile.business_name || profile.full_name || user.email!.split("@")[0];
+  const senderLines: string[] = [];
+  if (profile.full_name) senderLines.push(`Name: ${profile.full_name}`);
+  if (profile.business_name) senderLines.push(`Business: ${profile.business_name}`);
+  if (profile.email || user.email) senderLines.push(`Email: ${profile.email || user.email}`);
+  if (profile.phone) senderLines.push(`Phone: ${profile.phone}`);
+  if (profile.business_address) senderLines.push(`Address: ${profile.business_address}`);
+  if (profile.gstin) senderLines.push(`GSTIN: ${profile.gstin}`);
+  const senderInfo = senderLines.join("\n");
 
-  const clientInfo = [
-    clientName && `Name: ${clientName}`,
-    clientCompany && `Company: ${clientCompany}`,
-    clientEmail && `Email: ${clientEmail}`,
-  ].filter(Boolean).join("\n");
+  // Build client info — only include fields that are actually provided
+  const clientLines: string[] = [];
+  if (clientName) clientLines.push(`Name: ${clientName}`);
+  if (clientCompany) clientLines.push(`Company: ${clientCompany}`);
+  if (clientEmail) clientLines.push(`Email: ${clientEmail}`);
+  const clientInfo = clientLines.join("\n") || "Not specified";
 
   try {
     const completion = await groq.chat.completions.create({
@@ -40,28 +47,33 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "user",
-          content: `You are writing a professional freelance project proposal. Write it in first person from the freelancer's perspective.
+          content: `You are a proposal writing assistant. Write a professional project proposal using ONLY the data given below. Never invent or guess any name, company, email, phone, or number not explicitly listed.
 
-Freelancer/Sender Info:
-${senderInfo || `Name: ${senderName}`}
+--- FREELANCER (writing this proposal) ---
+${senderInfo}
+--- END FREELANCER ---
 
-Client Info:
+--- CLIENT (receiving this proposal) ---
 ${clientInfo}
+--- END CLIENT ---
 
-Project Description: ${projectDescription}
+--- PROJECT ---
+Description: ${projectDescription}
 Budget: ${budget ? `₹${budget}` : "To be discussed"}
 Timeline: ${timeline || "To be discussed"}
+--- END PROJECT ---
 
-Structure the proposal with these sections:
-1. Greeting & Introduction
-2. Understanding of the Project
-3. Proposed Approach & Deliverables
-4. Timeline
-5. Pricing
-6. Why Choose ${senderName}
-7. Call to Action / Next Steps
+Write the proposal in first person with these sections:
+1. Dear [exact client name from CLIENT section above, or "Sir/Madam" if not given]
+2. Introduction — who you are (use exact name/business from FREELANCER section)
+3. Understanding of the Project
+4. Proposed Approach & Deliverables
+5. Timeline
+6. Pricing (use the exact budget number, or "to be discussed")
+7. Why Choose [exact name from FREELANCER section]
+8. Sign off with: exact full name, email, and phone from FREELANCER section
 
-Keep it professional, concise, and persuasive. Address the client by name if provided.`,
+STRICT RULE: Every name, email, phone, and company in your output must come directly from the data above. If a field is not provided, omit it — do not substitute or invent.`,
         },
       ],
     });

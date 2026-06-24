@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2 } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 type Client = {
@@ -20,11 +20,16 @@ type Client = {
   created_at: string;
 };
 
+const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", address: "" });
+  const [form, setForm] = useState(emptyForm);
+  const [editing, setEditing] = useState<Client | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState(emptyForm);
 
   const supabase = createClient();
 
@@ -41,6 +46,12 @@ export default function ClientsPage() {
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
+  function openEdit(c: Client) {
+    setEditing(c);
+    setEditForm({ name: c.name, email: c.email, phone: c.phone || "", company: c.company || "", address: c.address || "" });
+    setEditOpen(true);
+  }
+
   async function deleteClient(id: string) {
     if (!confirm("Delete this client? This cannot be undone.")) return;
     const { error } = await supabase.from("clients").delete().eq("id", id);
@@ -53,7 +64,6 @@ export default function ClientsPage() {
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     const { error } = await supabase.from("clients").insert({
       user_id: user.id,
       name: form.name,
@@ -62,17 +72,59 @@ export default function ClientsPage() {
       company: form.company || null,
       address: form.address || null,
     });
-
-    if (error) {
-      toast.error("Failed to add client");
-    } else {
-      toast.success("Client added!");
-      setOpen(false);
-      setForm({ name: "", email: "", phone: "", company: "", address: "" });
-      fetchClients();
-    }
+    if (error) { toast.error("Failed to add client"); }
+    else { toast.success("Client added!"); setOpen(false); setForm(emptyForm); fetchClients(); }
     setSaving(false);
   }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    const { error } = await supabase.from("clients").update({
+      name: editForm.name,
+      email: editForm.email,
+      phone: editForm.phone || null,
+      company: editForm.company || null,
+      address: editForm.address || null,
+    }).eq("id", editing.id);
+    if (error) { toast.error("Failed to update client"); }
+    else { toast.success("Client updated!"); setEditOpen(false); setEditing(null); fetchClients(); }
+    setSaving(false);
+  }
+
+  const ClientForm = ({ f, setF, onSubmit, submitLabel }: {
+    f: typeof emptyForm;
+    setF: (v: typeof emptyForm) => void;
+    onSubmit: (e: React.FormEvent) => void;
+    submitLabel: string;
+  }) => (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label>Full Name *</Label>
+        <Input placeholder="Rahul Sharma" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Email *</Label>
+        <Input type="email" placeholder="rahul@company.com" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Phone</Label>
+        <Input placeholder="+91 98765 43210" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Company</Label>
+        <Input placeholder="ABC Technologies" value={f.company} onChange={e => setF({ ...f, company: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Address</Label>
+        <Input placeholder="Delhi, India" value={f.address} onChange={e => setF({ ...f, address: e.target.value })} />
+      </div>
+      <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
+        {saving ? "Saving..." : submitLabel}
+      </Button>
+    </form>
+  );
 
   return (
     <div>
@@ -89,34 +141,20 @@ export default function ClientsPage() {
             <DialogHeader>
               <DialogTitle>Add New Client</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Full Name *</Label>
-                <Input placeholder="Rahul Sharma" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Email *</Label>
-                <Input type="email" placeholder="rahul@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input placeholder="+91 98765 43210" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Company</Label>
-                <Input placeholder="ABC Technologies" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Address</Label>
-                <Input placeholder="Delhi, India" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-              </div>
-              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
-                {saving ? "Adding..." : "Add Client"}
-              </Button>
-            </form>
+            <ClientForm f={form} setF={setForm} onSubmit={handleAdd} submitLabel="Add Client" />
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setEditing(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+          </DialogHeader>
+          <ClientForm f={editForm} setF={setEditForm} onSubmit={handleEdit} submitLabel="Save Changes" />
+        </DialogContent>
+      </Dialog>
 
       {clients.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
@@ -154,13 +192,22 @@ export default function ClientsPage() {
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={() => deleteClient(c.id)}
-                    className="absolute top-0 right-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                    title="Delete client"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="absolute top-0 right-0 flex items-center gap-1.5">
+                    <button
+                      onClick={() => openEdit(c)}
+                      className="text-gray-300 dark:text-gray-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
+                      title="Edit client"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => deleteClient(c.id)}
+                      className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      title="Delete client"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -9,9 +9,10 @@ export async function POST(request: Request) {
   const body = await request.json();
   const {
     items, gst_type, gst_rate, due_date, invoice_date,
-    payment_method, transaction_id, notes, terms,
+    payment_methods, transaction_id, notes, terms,
+    upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_company, customer_address, customer_gstin,
+    customer_name, customer_company, customer_address, customer_gstin, customer_email,
   } = body;
 
   const subtotal: number = items.reduce(
@@ -39,12 +40,19 @@ export async function POST(request: Request) {
     total,
     due_date: due_date || null,
     status: "unpaid",
-    payment_method: payment_method || null,
+    payment_methods: payment_methods || [],
+    payment_method: (payment_methods || []).join(", ") || null,
     transaction_id: transaction_id || null,
     notes: notes || null,
     terms: terms || null,
+    upi_id: upi_id || null,
+    bank_account_name: bank_account_name || null,
+    bank_account_number: bank_account_number || null,
+    bank_ifsc: bank_ifsc || null,
+    bank_name: bank_name || null,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin,
+    customer_email: customer_email || null,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
