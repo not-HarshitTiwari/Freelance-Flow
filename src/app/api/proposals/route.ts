@@ -1,15 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Check subscription
   const { data: profile } = await supabase
     .from("profiles")
     .select("plan")
@@ -23,9 +22,12 @@ export async function POST(request: Request) {
   const { projectDescription, clientName, budget, timeline } = await request.json();
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const prompt = `You are a professional freelance proposal writer. Write a project proposal with the following details:
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        {
+          role: "user",
+          content: `You are a professional freelance proposal writer. Write a project proposal with the following details:
 
 Client Name: ${clientName}
 Project Description: ${projectDescription}
@@ -33,10 +35,12 @@ Budget: ${budget ? `₹${budget}` : "To be discussed"}
 Timeline: ${timeline || "To be discussed"}
 
 Include: greeting, understanding of project, proposed approach, deliverables, timeline, pricing, why choose me, call to action.
-Keep it professional and concise.`;
+Keep it professional and concise.`,
+        },
+      ],
+    });
 
-    const result = await model.generateContent(prompt);
-    const content = result.response.text();
+    const content = completion.choices[0]?.message?.content || "";
 
     const { data, error } = await supabase.from("proposals").insert({
       user_id: user.id,
@@ -49,8 +53,9 @@ Keep it professional and concise.`;
     if (error) throw error;
     return NextResponse.json({ proposal: data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Gemini error:", message);
+    const message =
+      err instanceof Error ? err.message : JSON.stringify(err);
+    console.error("Groq error:", message);
     return NextResponse.json({ error: `Failed to generate proposal: ${message}` }, { status: 500 });
   }
 }
@@ -67,4 +72,14 @@ export async function GET() {
     .order("created_at", { ascending: false });
 
   return NextResponse.json({ proposals: data });
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await request.json();
+  const { error } = await supabase.from("proposals").delete().eq("id", id).eq("user_id", user.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

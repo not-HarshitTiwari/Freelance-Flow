@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, FileText, Copy, Lock } from "lucide-react";
+import { Sparkles, FileText, Copy, Lock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Proposal = {
@@ -57,6 +57,17 @@ export default function ProposalsPage() {
       setIsPro(profile?.plan === "pro");
     });
   }, [fetchProposals]);
+
+  async function deleteProposal(id: string) {
+    if (!confirm("Delete this proposal? This cannot be undone.")) return;
+    await fetch("/api/proposals", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    toast.success("Proposal deleted");
+    fetchProposals();
+  }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -196,7 +207,16 @@ export default function ProposalsPage() {
                     {p.amount && ` • ₹${p.amount.toLocaleString("en-IN")}`}
                   </p>
                 </div>
-                <Badge className={statusColors[p.status] || ""}>{p.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge className={statusColors[p.status] || ""}>{p.status}</Badge>
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteProposal(p.id); }}
+                    className="text-gray-400 hover:text-red-600"
+                    title="Delete proposal"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </CardContent>
             </Card>
           ))}

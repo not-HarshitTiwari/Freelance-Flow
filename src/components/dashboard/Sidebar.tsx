@@ -14,6 +14,7 @@ import {
   LogOut,
   Zap,
   Crown,
+  Settings,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/dashboard/proposals", label: "Proposals", icon: FileText },
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar({ user, plan }: { user: User; plan: string }) {
@@ -68,7 +70,6 @@ export default function Sidebar({ user, plan }: { user: User; plan: string }) {
         ))}
       </nav>
 
-      {/* Upgrade banner for free users */}
       {plan !== "pro" && (
         <div className="mx-3 mb-3 rounded-lg bg-violet-50 border border-violet-200 p-3">
           <p className="text-xs font-semibold text-violet-700 mb-1 flex items-center gap-1">

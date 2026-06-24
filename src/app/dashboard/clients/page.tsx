@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2 } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Client = {
@@ -16,6 +16,7 @@ type Client = {
   email: string;
   phone: string | null;
   company: string | null;
+  address: string | null;
   created_at: string;
 };
 
@@ -23,7 +24,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", address: "" });
 
   const supabase = createClient();
 
@@ -40,6 +41,13 @@ export default function ClientsPage() {
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
+  async function deleteClient(id: string) {
+    if (!confirm("Delete this client? This cannot be undone.")) return;
+    const { error } = await supabase.from("clients").delete().eq("id", id);
+    if (error) toast.error("Failed to delete client");
+    else { toast.success("Client deleted"); fetchClients(); }
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -52,6 +60,7 @@ export default function ClientsPage() {
       email: form.email,
       phone: form.phone || null,
       company: form.company || null,
+      address: form.address || null,
     });
 
     if (error) {
@@ -59,7 +68,7 @@ export default function ClientsPage() {
     } else {
       toast.success("Client added!");
       setOpen(false);
-      setForm({ name: "", email: "", phone: "", company: "" });
+      setForm({ name: "", email: "", phone: "", company: "", address: "" });
       fetchClients();
     }
     setSaving(false);
@@ -83,38 +92,23 @@ export default function ClientsPage() {
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-2">
                 <Label>Full Name *</Label>
-                <Input
-                  placeholder="Rahul Sharma"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  required
-                />
+                <Input placeholder="Rahul Sharma" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div className="space-y-2">
                 <Label>Email *</Label>
-                <Input
-                  type="email"
-                  placeholder="rahul@company.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
-                />
+                <Input type="email" placeholder="rahul@company.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
               </div>
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input
-                  placeholder="+91 98765 43210"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
+                <Input placeholder="+91 98765 43210" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Company</Label>
-                <Input
-                  placeholder="ABC Technologies"
-                  value={form.company}
-                  onChange={(e) => setForm({ ...form, company: e.target.value })}
-                />
+                <Input placeholder="ABC Technologies" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input placeholder="Delhi, India" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
               </div>
               <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700" disabled={saving}>
                 {saving ? "Adding..." : "Add Client"}
@@ -135,7 +129,7 @@ export default function ClientsPage() {
           {clients.map((c) => (
             <Card key={c.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-5">
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 relative">
                   <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 font-bold shrink-0">
                     {c.name[0].toUpperCase()}
                   </div>
@@ -154,7 +148,19 @@ export default function ClientsPage() {
                         <Phone size={11} /> {c.phone}
                       </p>
                     )}
+                    {c.address && (
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                        <MapPin size={11} /> {c.address}
+                      </p>
+                    )}
                   </div>
+                  <button
+                    onClick={() => deleteClient(c.id)}
+                    className="absolute top-0 right-0 text-gray-300 hover:text-red-500 transition-colors"
+                    title="Delete client"
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </CardContent>
             </Card>
