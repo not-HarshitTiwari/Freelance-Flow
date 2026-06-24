@@ -11,6 +11,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check } from "lucide-react";
+import { AdBanner } from "@/components/ads/AdBanner";
+import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
+import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type Proposal = {
@@ -49,7 +52,10 @@ export default function ProposalsPage() {
   const [sendEmail, setSendEmail] = useState("");
   const [sendName, setSendName] = useState("");
   const [sending, setSending] = useState(false);
+  const planCtx = usePlan();
   const [isPro, setIsPro] = useState(false);
+  const [rewardedOpen, setRewardedOpen] = useState(false);
+  const [pendingGenerate, setPendingGenerate] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [form, setForm] = useState({
     clientName: "",
@@ -75,7 +81,7 @@ export default function ProposalsPage() {
         supabase.from("profiles").select("plan").eq("id", user.id).single(),
         supabase.from("clients").select("id, name, email, company").eq("user_id", user.id).order("name"),
       ]);
-      setIsPro(profile?.plan === "pro");
+      setIsPro(profile?.plan === "pro" || planCtx === "pro");
       setClients(clientData || []);
     });
   }, [fetchProposals]);
@@ -164,32 +170,47 @@ export default function ProposalsPage() {
     }
   }
 
-  if (!isPro) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center mb-4">
-          <Lock size={28} className="text-violet-600 dark:text-violet-400" />
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Pro Feature</h2>
-        <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-xs">
-          AI Proposal generation is a Pro feature. Upgrade to generate unlimited proposals in seconds.
-        </p>
-        <Link href="/dashboard/upgrade">
-          <Button className="bg-violet-600 hover:bg-violet-700 gap-2 text-white">
-            <Sparkles size={16} /> Upgrade to Pro — ₹999/mo
-          </Button>
-        </Link>
-      </div>
-    );
+  async function generateAfterAd() {
+    setPendingGenerate(false);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      toast.success("Proposal generated!");
+      setOpen(false);
+      setForm({ clientName: "", clientEmail: "", clientCompany: "", projectDescription: "", budget: "", timeline: "" });
+      setSelectedClientId("");
+      fetchProposals();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate proposal");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   return (
     <div>
+      <RewardedAdModal
+        open={rewardedOpen}
+        title="Generate Proposal"
+        description="Watch a short ad to generate one AI proposal for free"
+        onRewarded={generateAfterAd}
+        onClose={() => { setRewardedOpen(false); setPendingGenerate(false); }}
+      />
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Proposals</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Generate AI-powered proposals in seconds</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+            {isPro ? "Generate AI-powered proposals in seconds" : "Watch an ad to generate proposals for free"}
+          </p>
         </div>
+        {isPro ? (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
             <Sparkles size={16} /> Generate Proposal
@@ -291,56 +312,105 @@ export default function ProposalsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        ) : (
+          <div className="flex gap-2">
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger className="inline-flex items-center gap-2 border border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400 text-sm font-medium px-3 h-8 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
+                <Sparkles size={16} /> Watch Ad &amp; Generate
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader><DialogTitle>Generate AI Proposal (Free)</DialogTitle></DialogHeader>
+                <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">Fill in details, then watch a short ad to generate.</p>
+                <form onSubmit={e => { e.preventDefault(); setPendingGenerate(true); setOpen(false); setRewardedOpen(true); }} className="space-y-4">
+                  {clients.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Pick a saved client (optional)</Label>
+                      <select value={selectedClientId} onChange={e => pickClient(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
+                        <option value="">— Select client —</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.company ? ` (${c.company})` : ""}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Client Name *</Label><Input placeholder="Rahul Sharma" value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} required /></div>
+                    <div className="space-y-2"><Label>Client Email</Label><Input type="email" placeholder="rahul@co.com" value={form.clientEmail} onChange={e => setForm({ ...form, clientEmail: e.target.value })} /></div>
+                  </div>
+                  <div className="space-y-2"><Label>Client Company</Label><Input placeholder="ABC Tech" value={form.clientCompany} onChange={e => setForm({ ...form, clientCompany: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>Project Description *</Label><Textarea placeholder="Build an e-commerce website..." value={form.projectDescription} onChange={e => setForm({ ...form, projectDescription: e.target.value })} rows={3} required /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Budget (₹)</Label><Input type="number" placeholder="50000" value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Timeline</Label><Input placeholder="4 weeks" value={form.timeline} onChange={e => setForm({ ...form, timeline: e.target.value })} /></div>
+                  </div>
+                  <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2"><Sparkles size={16} /> Continue to Ad</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+            <Link href="/dashboard/upgrade">
+              <Button className="bg-violet-600 hover:bg-violet-700 text-white text-sm h-8 gap-1.5">
+                <Sparkles size={14} /> Upgrade to Pro
+              </Button>
+            </Link>
+          </div>
+        )}
       </div>
+
+      {/* Horizontal ad for free users */}
+      {!isPro && <AdBanner format="horizontal" className="mb-6" />}
 
       {proposals.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <FileText size={48} className="mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium dark:text-gray-400">No proposals yet</p>
-          <p className="text-sm">Click &quot;Generate Proposal&quot; to create your first one</p>
+          <p className="text-sm">
+            {isPro ? "Click \"Generate Proposal\" to create your first one" : "Watch an ad to generate your first proposal"}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {proposals.map((p) => (
-            <Card
-              key={p.id}
-              className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setSelected(p)}
-            >
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{p.title}</p>
-                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
-                    {new Date(p.created_at).toLocaleDateString("en-IN")}
-                    {p.amount && ` • ₹${p.amount.toLocaleString("en-IN")}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                  <Badge className={statusColors[p.status] || ""}>{p.status}</Badge>
-                  <button
-                    onClick={() => { setEditing(p); setEditContent(p.content); }}
-                    className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400"
-                    title="Edit proposal"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    onClick={() => { setSendTarget(p); setSendEmail(""); setSendName(""); }}
-                    className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
-                    title="Send via email"
-                  >
-                    <Send size={15} />
-                  </button>
-                  <button
-                    onClick={() => deleteProposal(p.id)}
-                    className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                    title="Delete proposal"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
+          {proposals.map((p, i) => (
+            <div key={p.id}>
+              {!isPro && i > 0 && i % 3 === 0 && (
+                <AdBanner format="rectangle" className="my-3" />
+              )}
+              <Card
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setSelected(p)}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">{p.title}</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
+                      {new Date(p.created_at).toLocaleDateString("en-IN")}
+                      {p.amount && ` • ₹${p.amount.toLocaleString("en-IN")}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    <Badge className={statusColors[p.status] || ""}>{p.status}</Badge>
+                    <button
+                      onClick={() => { setEditing(p); setEditContent(p.content); }}
+                      className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400"
+                      title="Edit proposal"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => { setSendTarget(p); setSendEmail(""); setSendName(""); }}
+                      className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                      title="Send via email"
+                    >
+                      <Send size={15} />
+                    </button>
+                    <button
+                      onClick={() => deleteProposal(p.id)}
+                      className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                      title="Delete proposal"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ))}
         </div>
       )}

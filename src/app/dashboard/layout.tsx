@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/dashboard/Sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { PlanProvider } from "@/components/dashboard/PlanProvider";
+import { DashboardAdBanner } from "@/components/ads/DashboardAdBanner";
 
 export default async function DashboardLayout({
   children,
@@ -18,13 +20,19 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
-  const plan = profile?.plan || "free";
+  const plan = (profile?.plan as "free" | "pro") || "free";
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
-      <Sidebar user={user} plan={plan} />
-      <main className="flex-1 overflow-auto p-6 bg-gray-50 dark:bg-gray-950">{children}</main>
-      <Toaster />
-    </div>
+    <PlanProvider plan={plan}>
+      <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
+        <Sidebar user={user} plan={plan} />
+        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950">
+          {plan === "free" && <DashboardAdBanner />}
+          <div className="p-6">{children}</div>
+          {plan === "free" && <DashboardAdBanner className="px-6 pb-6" />}
+        </main>
+        <Toaster />
+      </div>
+    </PlanProvider>
   );
 }

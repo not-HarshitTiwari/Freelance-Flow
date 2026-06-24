@@ -9,6 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil } from "lucide-react";
+import { AdBanner } from "@/components/ads/AdBanner";
+import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
+import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type InvoiceItem = { description: string; quantity: number; rate: number };
@@ -227,6 +230,9 @@ export default function InvoicesPage() {
   const [sendName, setSendName] = useState("");
   const [sendMessage, setSendMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendRewardedOpen, setSendRewardedOpen] = useState(false);
+  const planCtx = usePlan();
+  const isPro = planCtx === "pro";
 
   const fetchInvoices = useCallback(async () => {
     const res = await fetch("/api/invoices");
@@ -397,8 +403,7 @@ export default function InvoicesPage() {
     } finally { setEditSaving(false); }
   }
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
+  async function doSend() {
     if (!sendTarget) return;
     setSending(true);
     try {
@@ -416,12 +421,29 @@ export default function InvoicesPage() {
     } finally { setSending(false); }
   }
 
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isPro) {
+      setSendRewardedOpen(true);
+    } else {
+      await doSend();
+    }
+  }
+
   const selectStyle = "h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none";
   const sectionStyle = "border dark:border-gray-700 rounded-lg p-4 space-y-3";
   const sectionTitle = "font-semibold text-sm text-gray-700 dark:text-gray-300";
 
   return (
     <div>
+      <RewardedAdModal
+        open={sendRewardedOpen}
+        title="Send Invoice"
+        description="Watch a short ad to send this invoice via email for free"
+        onRewarded={async () => { setSendRewardedOpen(false); await doSend(); }}
+        onClose={() => setSendRewardedOpen(false)}
+      />
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Invoices</h1>
@@ -595,6 +617,8 @@ export default function InvoicesPage() {
         </Dialog>
       </div>
 
+      {!isPro && <AdBanner format="horizontal" className="mb-6" />}
+
       {invoices.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <Receipt size={48} className="mx-auto mb-4 opacity-30" />
@@ -603,8 +627,10 @@ export default function InvoicesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {invoices.map((inv) => (
-            <Card key={inv.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(inv)}>
+          {invoices.map((inv, i) => (
+            <div key={inv.id}>
+              {!isPro && i > 0 && i % 4 === 0 && <AdBanner format="rectangle" className="my-3" />}
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(inv)}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="font-medium text-gray-900 dark:text-white">{inv.invoice_number}</p>
@@ -625,6 +651,7 @@ export default function InvoicesPage() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           ))}
         </div>
       )}
