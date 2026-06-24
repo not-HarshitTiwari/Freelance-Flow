@@ -63,9 +63,9 @@ type Profile = {
 };
 
 const statusColors: Record<string, string> = {
-  unpaid: "bg-orange-100 text-orange-600",
-  paid: "bg-green-100 text-green-600",
-  overdue: "bg-red-100 text-red-600",
+  unpaid: "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300",
+  paid: "bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300",
+  overdue: "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300",
 };
 
 type RGB = [number, number, number];
@@ -364,8 +364,8 @@ export default function InvoicesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-          <p className="text-gray-500 text-sm mt-1">Create GST-compliant invoices</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Invoices</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Create GST-compliant invoices</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
@@ -391,7 +391,7 @@ export default function InvoicesPage() {
 
               {/* Seller */}
               <div className="border rounded-lg p-4 space-y-3">
-                <p className="font-semibold text-sm text-gray-700">Seller Details</p>
+                <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">Seller Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Business Name</Label>
@@ -419,13 +419,13 @@ export default function InvoicesPage() {
               {/* Customer */}
               <div className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold text-sm text-gray-700">Customer Details</p>
+                  <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">Customer Details</p>
                 </div>
                 {clients.length > 0 && (
                   <div className="space-y-1.5">
                     <Label>Select from saved clients</Label>
                     <select
-                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none"
+                      className="h-8 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none"
                       defaultValue=""
                       onChange={e => selectClient(e.target.value)}
                     >
@@ -460,7 +460,7 @@ export default function InvoicesPage() {
 
               {/* Line Items */}
               <div className="space-y-2">
-                <p className="font-semibold text-sm text-gray-700">Line Items</p>
+                <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">Line Items</p>
                 {items.map((item, i) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-5">
@@ -472,7 +472,7 @@ export default function InvoicesPage() {
                     <div className="col-span-3">
                       <Input type="number" placeholder="Rate ₹" min={0} value={item.rate} onChange={e => updateItem(i, "rate", parseFloat(e.target.value) || 0)} />
                     </div>
-                    <div className="col-span-1 text-right text-xs text-gray-500">
+                    <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">
                       ₹{(item.quantity * item.rate).toLocaleString("en-IN")}
                     </div>
                     <div className="col-span-1 flex justify-end">
@@ -489,11 +489,11 @@ export default function InvoicesPage() {
 
               {/* Tax */}
               <div className="border rounded-lg p-4 space-y-3">
-                <p className="font-semibold text-sm text-gray-700">Tax Details</p>
+                <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">Tax Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>GST Type</Label>
-                    <select value={form.gst_type} onChange={e => setForm({ ...form, gst_type: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none">
+                    <select value={form.gst_type} onChange={e => setForm({ ...form, gst_type: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
                       <option value="cgst_sgst">CGST + SGST (Intra-state)</option>
                       <option value="igst">IGST (Inter-state)</option>
                       <option value="none">No GST</option>
@@ -501,7 +501,7 @@ export default function InvoicesPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>GST Rate (%)</Label>
-                    <select value={form.gst_rate} onChange={e => setForm({ ...form, gst_rate: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none">
+                    <select value={form.gst_rate} onChange={e => setForm({ ...form, gst_rate: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
                       <option value="0">0%</option>
                       <option value="5">5%</option>
                       <option value="12">12%</option>
@@ -512,24 +512,24 @@ export default function InvoicesPage() {
                 </div>
 
                 {/* Summary */}
-                <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5 mt-2">
-                  <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1.5 mt-2">
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
                   {form.gst_type === "cgst_sgst" && <>
-                    <div className="flex justify-between text-gray-500"><span>CGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
-                    <div className="flex justify-between text-gray-500"><span>SGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
                   </>}
-                  {form.gst_type === "igst" && <div className="flex justify-between text-gray-500"><span>IGST ({form.gst_rate}%)</span><span>₹{gstAmt.toLocaleString("en-IN")}</span></div>}
-                  <div className="flex justify-between font-bold text-gray-900 border-t pt-1.5"><span>Grand Total</span><span>₹{total.toLocaleString("en-IN")}</span></div>
+                  {form.gst_type === "igst" && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({form.gst_rate}%)</span><span>₹{gstAmt.toLocaleString("en-IN")}</span></div>}
+                  <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1.5"><span>Grand Total</span><span>₹{total.toLocaleString("en-IN")}</span></div>
                 </div>
               </div>
 
               {/* Payment */}
               <div className="border rounded-lg p-4 space-y-3">
-                <p className="font-semibold text-sm text-gray-700">Payment Information</p>
+                <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">Payment Information</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Payment Method</Label>
-                    <select value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none">
+                    <select value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })} className="h-8 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
                       <option value="">Select...</option>
                       <option value="UPI">UPI</option>
                       <option value="Bank Transfer">Bank Transfer</option>
@@ -566,9 +566,9 @@ export default function InvoicesPage() {
       </div>
 
       {invoices.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <Receipt size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-medium">No invoices yet</p>
+          <p className="text-lg font-medium dark:text-gray-400">No invoices yet</p>
           <p className="text-sm">Create your first GST invoice</p>
         </div>
       ) : (
@@ -577,15 +577,15 @@ export default function InvoicesPage() {
             <Card key={inv.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(inv)}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-gray-900">{inv.invoice_number}</p>
-                  <p className="text-sm text-gray-400 mt-0.5">
+                  <p className="font-medium text-gray-900 dark:text-white">{inv.invoice_number}</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
                     {inv.customer_name || inv.customer_company || "No customer"} •{" "}
                     {new Date(inv.invoice_date || inv.created_at).toLocaleDateString("en-IN")}
                     {inv.due_date && ` • Due ${new Date(inv.due_date).toLocaleDateString("en-IN")}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-900">₹{inv.total.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">₹{inv.total.toLocaleString("en-IN")}</span>
                   <Badge className={statusColors[inv.status] || ""}>{inv.status}</Badge>
                   <button
                     onClick={e => { e.stopPropagation(); downloadInvoicePdf(inv, pdfColor); }}
@@ -627,31 +627,31 @@ export default function InvoicesPage() {
             <div className="text-sm space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-400 uppercase font-semibold mb-1">From</p>
-                  <p className="font-medium">{selected.seller_name}</p>
-                  <p className="text-gray-500">{selected.seller_address}</p>
-                  <p className="text-gray-500">{selected.seller_email}</p>
-                  <p className="text-gray-500">{selected.seller_phone}</p>
-                  {selected.seller_gstin && <p className="text-gray-500">GSTIN: {selected.seller_gstin}</p>}
+                  <p className="text-xs text-gray-400 dark:text-gray-500 uppercase font-semibold mb-1">From</p>
+                  <p className="font-medium dark:text-white">{selected.seller_name}</p>
+                  <p className="text-gray-500 dark:text-gray-400">{selected.seller_address}</p>
+                  <p className="text-gray-500 dark:text-gray-400">{selected.seller_email}</p>
+                  <p className="text-gray-500 dark:text-gray-400">{selected.seller_phone}</p>
+                  {selected.seller_gstin && <p className="text-gray-500 dark:text-gray-400">GSTIN: {selected.seller_gstin}</p>}
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 uppercase font-semibold mb-1">To</p>
-                  <p className="font-medium">{selected.customer_name}</p>
-                  {selected.customer_company && <p className="text-gray-500">{selected.customer_company}</p>}
-                  <p className="text-gray-500">{selected.customer_address}</p>
-                  {selected.customer_gstin && <p className="text-gray-500">GSTIN: {selected.customer_gstin}</p>}
+                  <p className="text-xs text-gray-400 dark:text-gray-500 uppercase font-semibold mb-1">To</p>
+                  <p className="font-medium dark:text-white">{selected.customer_name}</p>
+                  {selected.customer_company && <p className="text-gray-500 dark:text-gray-400">{selected.customer_company}</p>}
+                  <p className="text-gray-500 dark:text-gray-400">{selected.customer_address}</p>
+                  {selected.customer_gstin && <p className="text-gray-500 dark:text-gray-400">GSTIN: {selected.customer_gstin}</p>}
                 </div>
               </div>
 
               <table className="w-full text-sm">
-                <thead><tr className="bg-gray-50 text-gray-600">
+                <thead><tr className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                   <th className="text-left p-2">Description</th>
                   <th className="text-right p-2">Qty</th>
                   <th className="text-right p-2">Rate</th>
                   <th className="text-right p-2">Amount</th>
                 </tr></thead>
                 <tbody>{selected.items.map((item, i) => (
-                  <tr key={i} className="border-b">
+                  <tr key={i} className="border-b dark:border-gray-700 dark:text-gray-300">
                     <td className="p-2">{item.description}</td>
                     <td className="p-2 text-right">{item.quantity}</td>
                     <td className="p-2 text-right">₹{item.rate.toLocaleString("en-IN")}</td>
@@ -661,32 +661,32 @@ export default function InvoicesPage() {
               </table>
 
               <div className="space-y-1 text-right">
-                <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>₹{selected.subtotal.toLocaleString("en-IN")}</span></div>
+                <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Subtotal</span><span>₹{selected.subtotal.toLocaleString("en-IN")}</span></div>
                 {selected.gst_type === "cgst_sgst" ? <>
-                  <div className="flex justify-between text-gray-500"><span>CGST ({selected.gst_rate / 2}%)</span><span>₹{selected.cgst?.toLocaleString("en-IN")}</span></div>
-                  <div className="flex justify-between text-gray-500"><span>SGST ({selected.gst_rate / 2}%)</span><span>₹{selected.sgst?.toLocaleString("en-IN")}</span></div>
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({selected.gst_rate / 2}%)</span><span>₹{selected.cgst?.toLocaleString("en-IN")}</span></div>
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({selected.gst_rate / 2}%)</span><span>₹{selected.sgst?.toLocaleString("en-IN")}</span></div>
                 </> : selected.gst_type === "igst" ? (
-                  <div className="flex justify-between text-gray-500"><span>IGST ({selected.gst_rate}%)</span><span>₹{selected.igst?.toLocaleString("en-IN")}</span></div>
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({selected.gst_rate}%)</span><span>₹{selected.igst?.toLocaleString("en-IN")}</span></div>
                 ) : null}
-                <div className="flex justify-between font-bold text-gray-900 border-t pt-1"><span>Grand Total</span><span>₹{selected.total.toLocaleString("en-IN")}</span></div>
+                <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1"><span>Grand Total</span><span>₹{selected.total.toLocaleString("en-IN")}</span></div>
               </div>
 
               {(selected.payment_method || selected.transaction_id) && (
-                <div className="bg-gray-50 rounded p-3 space-y-1">
-                  <p className="font-semibold text-xs text-gray-600 uppercase">Payment</p>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded p-3 space-y-1">
+                  <p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase">Payment</p>
                   {selected.payment_method && <p>Method: {selected.payment_method}</p>}
                   {selected.transaction_id && <p>Transaction ID: {selected.transaction_id}</p>}
                   <Badge className={statusColors[selected.status] || ""}>{selected.status}</Badge>
                 </div>
               )}
 
-              {selected.notes && <div><p className="font-semibold text-xs text-gray-600 uppercase mb-1">Notes</p><p className="text-gray-500">{selected.notes}</p></div>}
-              {selected.terms && <div><p className="font-semibold text-xs text-gray-600 uppercase mb-1">Terms</p><p className="text-gray-500">{selected.terms}</p></div>}
+              {selected.notes && <div><p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase mb-1">Notes</p><p className="text-gray-500 dark:text-gray-400">{selected.notes}</p></div>}
+              {selected.terms && <div><p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase mb-1">Terms</p><p className="text-gray-500 dark:text-gray-400">{selected.terms}</p></div>}
             </div>
 
             {/* PDF Color Picker */}
             <div className="mt-4 border-t pt-4">
-              <p className="text-xs font-semibold text-gray-600 uppercase mb-2">PDF Accent Color</p>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">PDF Accent Color</p>
               <div className="flex items-center gap-2 flex-wrap">
                 {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
                   <button

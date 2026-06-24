@@ -78,8 +78,8 @@ export default function ClientsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage your client relationships</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage your client relationships</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
@@ -110,7 +110,7 @@ export default function ClientsPage() {
                 <Label>Address</Label>
                 <Input placeholder="Delhi, India" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
               </div>
-              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700" disabled={saving}>
+              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
                 {saving ? "Adding..." : "Add Client"}
               </Button>
             </form>
@@ -119,9 +119,9 @@ export default function ClientsPage() {
       </div>
 
       {clients.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
+        <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <Users size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-medium">No clients yet</p>
+          <p className="text-lg font-medium dark:text-gray-400">No clients yet</p>
           <p className="text-sm">Add your first client to get started</p>
         </div>
       ) : (
@@ -130,33 +130,33 @@ export default function ClientsPage() {
             <Card key={c.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-5">
                 <div className="flex items-start gap-3 relative">
-                  <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 font-bold shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-700 dark:text-violet-300 font-bold shrink-0">
                     {c.name[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{c.name}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white truncate">{c.name}</p>
                     {c.company && (
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 mt-0.5">
                         <Building2 size={11} /> {c.company}
                       </p>
                     )}
-                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
                       <Mail size={11} /> {c.email}
                     </p>
                     {c.phone && (
-                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
                         <Phone size={11} /> {c.phone}
                       </p>
                     )}
                     {c.address && (
-                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
                         <MapPin size={11} /> {c.address}
                       </p>
                     )}
                   </div>
                   <button
                     onClick={() => deleteClient(c.id)}
-                    className="absolute top-0 right-0 text-gray-300 hover:text-red-500 transition-colors"
+                    className="absolute top-0 right-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                     title="Delete client"
                   >
                     <Trash2 size={15} />

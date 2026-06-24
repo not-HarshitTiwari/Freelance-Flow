@@ -21,9 +21,9 @@ export default async function DashboardLayout({
   const plan = profile?.plan || "free";
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       <Sidebar user={user} plan={plan} />
-      <main className="flex-1 overflow-auto p-6">{children}</main>
+      <main className="flex-1 overflow-auto p-6 bg-gray-50 dark:bg-gray-950">{children}</main>
       <Toaster />
     </div>
   );
