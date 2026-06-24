@@ -73,10 +73,8 @@ export default function ClientsPage() {
           <p className="text-gray-500 text-sm mt-1">Manage your client relationships</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className="bg-violet-600 hover:bg-violet-700 gap-2">
-              <Plus size={16} /> Add Client
-            </Button>
+          <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+            <Plus size={16} /> Add Client
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>

@@ -13,6 +13,7 @@ import {
   Users,
   LogOut,
   Zap,
+  Crown,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
@@ -23,7 +24,7 @@ const navItems = [
   { href: "/dashboard/clients", label: "Clients", icon: Users },
 ];
 
-export default function Sidebar({ user }: { user: User }) {
+export default function Sidebar({ user, plan }: { user: User; plan: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,11 +34,14 @@ export default function Sidebar({ user }: { user: User }) {
     router.push("/");
   }
 
-  const initials = (user.user_metadata?.full_name as string)
-    ?.split(" ")
-    .map((n: string) => n[0])
-    .join("")
-    .toUpperCase() || user.email?.[0].toUpperCase() || "U";
+  const initials =
+    (user.user_metadata?.full_name as string)
+      ?.split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase() ||
+    user.email?.[0].toUpperCase() ||
+    "U";
 
   return (
     <aside className="w-60 bg-white border-r flex flex-col h-screen">
@@ -63,6 +67,31 @@ export default function Sidebar({ user }: { user: User }) {
           </Link>
         ))}
       </nav>
+
+      {/* Upgrade banner for free users */}
+      {plan !== "pro" && (
+        <div className="mx-3 mb-3 rounded-lg bg-violet-50 border border-violet-200 p-3">
+          <p className="text-xs font-semibold text-violet-700 mb-1 flex items-center gap-1">
+            <Crown size={12} /> Free Plan
+          </p>
+          <p className="text-xs text-violet-600 mb-2">
+            Upgrade to Pro to unlock AI proposals & all features.
+          </p>
+          <Link href="/dashboard/upgrade">
+            <Button size="sm" className="w-full bg-violet-600 hover:bg-violet-700 h-7 text-xs">
+              Upgrade — ₹999/mo
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {plan === "pro" && (
+        <div className="mx-3 mb-3 rounded-lg bg-green-50 border border-green-200 p-2.5">
+          <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
+            <Crown size={12} /> Pro Plan Active
+          </p>
+        </div>
+      )}
 
       <div className="p-4 border-t">
         <div className="flex items-center gap-3 mb-3">

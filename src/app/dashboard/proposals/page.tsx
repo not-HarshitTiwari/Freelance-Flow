@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, Plus, FileText, Copy } from "lucide-react";
+import { Sparkles, FileText, Copy, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 type Proposal = {
@@ -32,6 +34,7 @@ export default function ProposalsPage() {
   const [open, setOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selected, setSelected] = useState<Proposal | null>(null);
+  const [isPro, setIsPro] = useState(false);
   const [form, setForm] = useState({
     clientName: "",
     projectDescription: "",
@@ -45,7 +48,15 @@ export default function ProposalsPage() {
     setProposals(data.proposals || []);
   }, []);
 
-  useEffect(() => { fetchProposals(); }, [fetchProposals]);
+  useEffect(() => {
+    fetchProposals();
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+      setIsPro(profile?.plan === "pro");
+    });
+  }, [fetchProposals]);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -62,11 +73,31 @@ export default function ProposalsPage() {
       setOpen(false);
       setForm({ clientName: "", projectDescription: "", budget: "", timeline: "" });
       fetchProposals();
-    } catch {
-      toast.error("Failed to generate proposal");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to generate proposal";
+      toast.error(msg);
     } finally {
       setGenerating(false);
     }
+  }
+
+  if (!isPro) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-full bg-violet-100 flex items-center justify-center mb-4">
+          <Lock size={28} className="text-violet-600" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Pro Feature</h2>
+        <p className="text-gray-500 mb-6 max-w-xs">
+          AI Proposal generation is a Pro feature. Upgrade to generate unlimited proposals in seconds.
+        </p>
+        <Link href="/dashboard/upgrade">
+          <Button className="bg-violet-600 hover:bg-violet-700 gap-2">
+            <Sparkles size={16} /> Upgrade to Pro — ₹999/mo
+          </Button>
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -77,10 +108,8 @@ export default function ProposalsPage() {
           <p className="text-gray-500 text-sm mt-1">Generate AI-powered proposals in seconds</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className="bg-violet-600 hover:bg-violet-700 gap-2">
-              <Sparkles size={16} /> Generate Proposal
-            </Button>
+          <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+            <Sparkles size={16} /> Generate Proposal
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>

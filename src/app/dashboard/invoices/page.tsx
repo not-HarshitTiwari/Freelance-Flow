@@ -103,10 +103,8 @@ export default function InvoicesPage() {
           <p className="text-gray-500 text-sm mt-1">Create and track your invoices</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className="bg-violet-600 hover:bg-violet-700 gap-2">
-              <Plus size={16} /> New Invoice
-            </Button>
+          <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+            <Plus size={16} /> New Invoice
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>

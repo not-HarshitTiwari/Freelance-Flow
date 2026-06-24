@@ -9,30 +9,32 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Check subscription
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("plan")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.plan !== "pro") {
+    return NextResponse.json({ error: "Upgrade to Pro to generate proposals." }, { status: 403 });
+  }
+
   const { projectDescription, clientName, budget, timeline } = await request.json();
 
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-  const prompt = `You are a professional freelance proposal writer. Write a professional project proposal with the following details:
+    const prompt = `You are a professional freelance proposal writer. Write a project proposal with the following details:
 
 Client Name: ${clientName}
 Project Description: ${projectDescription}
 Budget: ${budget ? `₹${budget}` : "To be discussed"}
 Timeline: ${timeline || "To be discussed"}
 
-Write a compelling proposal that includes:
-1. A professional greeting
-2. Understanding of the project
-3. Proposed approach/solution
-4. Deliverables
-5. Timeline breakdown
-6. Investment/pricing
-7. Why choose me
-8. Call to action
+Include: greeting, understanding of project, proposed approach, deliverables, timeline, pricing, why choose me, call to action.
+Keep it professional and concise.`;
 
-Keep it professional, concise, and persuasive. Format it nicely with clear sections.`;
-
-  try {
     const result = await model.generateContent(prompt);
     const content = result.response.text();
 
@@ -47,8 +49,9 @@ Keep it professional, concise, and persuasive. Format it nicely with clear secti
     if (error) throw error;
     return NextResponse.json({ proposal: data });
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Failed to generate proposal" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Gemini error:", message);
+    return NextResponse.json({ error: `Failed to generate proposal: ${message}` }, { status: 500 });
   }
 }
 
