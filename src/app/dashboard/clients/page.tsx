@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil } from "lucide-react";
+import { AdBanner } from "@/components/ads/AdBanner";
+import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type Client = {
@@ -23,6 +25,7 @@ type Client = {
 const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
 
 export default function ClientsPage() {
+  const isPro = usePlan() === "pro";
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -156,6 +159,8 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
 
+      {!isPro && <AdBanner format="horizontal" className="mb-6" />}
+
       {clients.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <Users size={48} className="mx-auto mb-4 opacity-30" />
@@ -214,6 +219,8 @@ export default function ClientsPage() {
           ))}
         </div>
       )}
+
+      {!isPro && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
     </div>
   );
 }

@@ -3,17 +3,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Receipt, Users, IndianRupee } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AdBanner } from "@/components/ads/AdBanner";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [{ count: proposalCount }, { count: clientCount }, { data: invoices }] =
+  const [{ count: proposalCount }, { count: clientCount }, { data: invoices }, { data: profile }] =
     await Promise.all([
       supabase.from("proposals").select("*", { count: "exact", head: true }).eq("user_id", user!.id),
       supabase.from("clients").select("*", { count: "exact", head: true }).eq("user_id", user!.id),
       supabase.from("invoices").select("total, status").eq("user_id", user!.id),
+      supabase.from("profiles").select("plan").eq("id", user!.id).single(),
     ]);
+
+  const isPro = profile?.plan === "pro";
 
   const totalEarned = invoices?.filter((i) => i.status === "paid").reduce((s, i) => s + i.total, 0) ?? 0;
   const unpaidAmount = invoices?.filter((i) => i.status === "unpaid").reduce((s, i) => s + i.total, 0) ?? 0;
@@ -82,6 +86,8 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
+      {!isPro && <AdBanner format="horizontal" className="mb-8" />}
+
       <div className="grid md:grid-cols-3 gap-4">
         <Card className="border-dashed border-2">
           <CardHeader>
@@ -123,6 +129,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {!isPro && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
     </div>
   );
 }

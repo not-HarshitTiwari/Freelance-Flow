@@ -354,7 +354,6 @@ export default function ProposalsPage() {
         )}
       </div>
 
-      {/* Horizontal ad for free users */}
       {!isPro && <AdBanner format="horizontal" className="mb-6" />}
 
       {proposals.length === 0 ? (

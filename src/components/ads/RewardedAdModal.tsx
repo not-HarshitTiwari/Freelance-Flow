@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { PlayCircle, X, CheckCircle } from "lucide-react";
 
-const PUB_ID = "ca-pub-8679297078256754";
-const REWARDED_SLOT = process.env.NEXT_PUBLIC_ADSENSE_REWARDED_SLOT || "";
-const IS_REAL_AD = !!REWARDED_SLOT;
+const PUB_ID = process.env.NEXT_PUBLIC_ADSENSE_PUB_ID!;
+const REWARDED_SLOT = process.env.NEXT_PUBLIC_ADSENSE_REWARDED_SLOT!;
+const IS_REAL_AD = !!(PUB_ID && REWARDED_SLOT);
 
 type Props = {
   open: boolean;

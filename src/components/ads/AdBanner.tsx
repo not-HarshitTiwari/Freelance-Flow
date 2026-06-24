@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-const PUB_ID = "ca-pub-8679297078256754";
-const SLOT = process.env.NEXT_PUBLIC_ADSENSE_BANNER_SLOT || "";
+const PUB_ID = process.env.NEXT_PUBLIC_ADSENSE_PUB_ID!;
+const SLOT   = process.env.NEXT_PUBLIC_ADSENSE_BANNER_SLOT!;
+const IS_DEV = process.env.NODE_ENV === "development";
 
 type AdBannerProps = {
   className?: string;
@@ -11,35 +12,36 @@ type AdBannerProps = {
 };
 
 export function AdBanner({ className = "", format = "horizontal" }: AdBannerProps) {
+  const pushed = useRef(false);
+
   useEffect(() => {
-    if (!SLOT) return;
+    if (IS_DEV || pushed.current) return;
+    pushed.current = true;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-    } catch {
-      // AdSense not loaded yet — safe to ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const heightClass =
-    format === "rectangle" ? "min-h-[250px]" :
-    format === "vertical"  ? "min-h-[600px]" :
-    "min-h-[90px]";
+    format === "rectangle" ? "h-[250px]" :
+    format === "vertical"  ? "h-[600px]" :
+    "h-[90px]";
 
-  // Dev / no real pub ID — show a placeholder banner
-  if (!SLOT) {
+  // Show placeholder in dev so you can see ad positions
+  if (IS_DEV) {
     return (
-      <div className={`w-full ${heightClass} bg-gray-100 dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center ${className}`}>
-        <p className="text-xs text-gray-400 dark:text-gray-500 text-center px-4">
-          📢 Advertisement<br />
-          <span className="text-gray-300 dark:text-gray-600">Add your AdSense Pub ID in .env.local</span>
+      <div className={`w-full ${heightClass} bg-yellow-50 dark:bg-yellow-900/20 border-2 border-dashed border-yellow-400 dark:border-yellow-600 rounded-lg flex items-center justify-center ${className}`}>
+        <p className="text-xs text-yellow-600 dark:text-yellow-400 font-medium text-center">
+          📢 AD SLOT ({format})<br />
+          <span className="font-normal opacity-70">Shows real ad after deploy</span>
         </p>
       </div>
     );
   }
 
   return (
-    <div className={`w-full overflow-hidden ${className}`}>
+    <div className={`w-full overflow-hidden ${heightClass} ${className}`}>
       <ins
         className="adsbygoogle"
         style={{ display: "block" }}
