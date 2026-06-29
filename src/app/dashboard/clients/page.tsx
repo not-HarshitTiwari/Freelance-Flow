@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2 } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
@@ -198,6 +198,21 @@ export default function ClientsPage() {
                     )}
                   </div>
                   <div className="absolute top-0 right-0 flex items-center gap-1.5">
+                    <button
+                      onClick={async () => {
+                        const res = await fetch("/api/portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: c.id }) });
+                        const data = await res.json();
+                        if (data.token) {
+                          const url = `${window.location.origin}/portal/${data.token}`;
+                          await navigator.clipboard.writeText(url);
+                          toast.success("Portal link copied!");
+                        } else toast.error("Failed to generate link");
+                      }}
+                      className="text-gray-300 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                      title="Copy client portal link"
+                    >
+                      <Link2 size={14} />
+                    </button>
                     <button
                       onClick={() => openEdit(c)}
                       className="text-gray-300 dark:text-gray-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"

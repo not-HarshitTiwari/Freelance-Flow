@@ -16,6 +16,7 @@ import {
   Settings,
   Sun,
   Moon,
+  Wallet,
 } from "lucide-react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/dashboard/proposals", label: "Proposals", icon: FileText },
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
+  { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

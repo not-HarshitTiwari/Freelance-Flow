@@ -1,0 +1,88 @@
+import { notFound } from "next/navigation";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import Image from "next/image";
+
+const statusColors: Record<string, string> = {
+  paid: "bg-green-100 text-green-700",
+  unpaid: "bg-orange-100 text-orange-700",
+};
+
+export default async function ClientPortalPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/portal?token=${token}`, { cache: "no-store" });
+  if (!res.ok) notFound();
+
+  const { client, invoices } = await res.json();
+
+  const totalDue = invoices?.filter((i: { status: string }) => i.status === "unpaid")
+    .reduce((s: number, i: { total: number }) => s + i.total, 0) ?? 0;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b px-6 py-4 flex items-center gap-3">
+        <Image src="/logo.png" alt="FreelanceFlow" width={28} height={28} className="rounded-sm" />
+        <span className="font-bold text-gray-900">FreelanceFlow</span>
+        <span className="text-gray-300 ml-1">|</span>
+        <span className="text-gray-500 text-sm">Client Portal</span>
+      </div>
+
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        {/* Client info */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Hello, {client?.name} 👋</h1>
+          {client?.company && <p className="text-gray-500 mt-1">{client.company}</p>}
+          {totalDue > 0 && (
+            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-5 py-3 inline-flex items-center gap-2">
+              <span className="text-orange-700 font-semibold text-sm">Amount Due:</span>
+              <span className="text-orange-700 font-bold text-lg">₹{totalDue.toLocaleString("en-IN")}</span>
+            </div>
+          )}
+        </div>
+
+        <h2 className="font-semibold text-gray-700 mb-3">Your Invoices</h2>
+
+        {!invoices?.length ? (
+          <p className="text-gray-400 text-sm">No invoices yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {invoices.map((inv: {
+              invoice_number: string; invoice_date: string; due_date: string | null;
+              total: number; status: string; payment_method: string | null; upi_id: string | null; notes: string | null;
+            }) => (
+              <Card key={inv.invoice_number}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-gray-900">{inv.invoice_number}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Issued {new Date(inv.invoice_date).toLocaleDateString("en-IN")}
+                        {inv.due_date && ` • Due ${new Date(inv.due_date).toLocaleDateString("en-IN")}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-900">₹{inv.total.toLocaleString("en-IN")}</span>
+                      <Badge className={statusColors[inv.status] || "bg-gray-100 text-gray-600"}>{inv.status}</Badge>
+                    </div>
+                  </div>
+
+                  {inv.status === "unpaid" && inv.payment_method && (
+                    <div className="bg-violet-50 rounded-lg p-3 text-sm space-y-1">
+                      <p className="font-medium text-violet-700">Pay via {inv.payment_method}</p>
+                      {inv.upi_id && <p className="text-violet-600">UPI ID: <strong>{inv.upi_id}</strong></p>}
+                    </div>
+                  )}
+
+                  {inv.notes && <p className="text-xs text-gray-400 mt-2">{inv.notes}</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <p className="text-center text-xs text-gray-300 mt-12">Powered by FreelanceFlow</p>
+      </div>
+    </div>
+  );
+}
