@@ -788,8 +788,6 @@ export default function InvoicesPage() {
               {selected.terms && <div><p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase mb-1">Terms</p><p className="text-gray-500 dark:text-gray-400">{selected.terms}</p></div>}
             </div>
 
-            </div>
-
             {/* Sticky footer — always visible */}
             <div className="shrink-0 border-t dark:border-gray-700 px-6 pt-3 pb-4 bg-white dark:bg-gray-950 space-y-3">
               {/* Template + Currency row */}
