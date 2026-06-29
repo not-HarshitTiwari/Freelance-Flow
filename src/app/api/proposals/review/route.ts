@@ -21,36 +21,32 @@ export async function POST(req: Request) {
   return NextResponse.json({ token });
 }
 
-// GET — fetch proposal by review token (public, uses admin to bypass RLS)
+// GET — fetch proposal by review token (public — RLS allows SELECT when review_token IS NOT NULL)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const supabase = createAdminClient();
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("proposals")
     .select("id, title, content, status, amount, created_at")
     .eq("review_token", token)
     .single();
 
-  if (error || !data) {
-    console.error("review GET error:", JSON.stringify(error), "data:", JSON.stringify(data));
-    return NextResponse.json({ error: "Invalid link" }, { status: 404 });
-  }
+  if (error || !data) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
   return NextResponse.json({ proposal: data });
 }
 
-// PATCH — client accepts or rejects (one-time only, uses admin to bypass RLS)
+// PATCH — client accepts or rejects (one-time only — RLS allows SELECT when review_token IS NOT NULL)
 export async function PATCH(req: Request) {
   const { token, action } = await req.json();
   if (!token || !["accepted", "rejected"].includes(action)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
-  // Only allow if still in draft/sent — prevent flipping after decision
   const { data: existing } = await supabase
     .from("proposals")
     .select("status")
