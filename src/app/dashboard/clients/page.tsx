@@ -159,7 +159,7 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {!isPro && <AdBanner format="horizontal" className="mb-6" />}
+      {!isPro && clients.length > 0 && <AdBanner format="horizontal" className="mb-6" />}
 
       {clients.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
@@ -220,7 +220,7 @@ export default function ClientsPage() {
         </div>
       )}
 
-      {!isPro && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
+      {!isPro && clients.length > 0 && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
     </div>
   );
 }

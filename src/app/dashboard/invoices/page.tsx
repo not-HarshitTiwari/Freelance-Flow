@@ -617,7 +617,7 @@ export default function InvoicesPage() {
         </Dialog>
       </div>
 
-      {!isPro && <AdBanner format="horizontal" className="mb-6" />}
+      {!isPro && invoices.length > 0 && <AdBanner format="horizontal" className="mb-6" />}
 
       {invoices.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">

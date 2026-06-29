@@ -130,7 +130,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {!isPro && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
+      {!isPro && (proposalCount ?? 0) + (clientCount ?? 0) > 0 && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
     </div>
   );
 }
