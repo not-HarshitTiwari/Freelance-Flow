@@ -711,7 +711,8 @@ export default function InvoicesPage() {
       {/* View Invoice Dialog */}
       {selected && (
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-          <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogContent className="max-w-lg p-0 overflow-hidden">
+            <div className="flex flex-col max-h-[85vh]">
             <div className="px-6 pt-6 pb-2 border-b dark:border-gray-700 shrink-0">
               <DialogHeader><DialogTitle>{selected.invoice_number}</DialogTitle></DialogHeader>
             </div>
@@ -833,6 +834,7 @@ export default function InvoicesPage() {
                   <Send size={16} /> Send Email
                 </Button>
               </div>
+            </div>
             </div>
           </DialogContent>
         </Dialog>
