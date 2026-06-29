@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
@@ -20,31 +21,47 @@ export async function POST(req: Request) {
   return NextResponse.json({ token });
 }
 
-// GET — fetch proposal by review token (public)
+// GET — fetch proposal by review token (public, uses admin to bypass RLS)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("proposals")
     .select("id, title, content, status, amount, created_at")
     .eq("review_token", token)
     .single();
 
-  if (error || !data) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
+  if (error || !data) {
+    console.error("review GET error:", JSON.stringify(error), "data:", JSON.stringify(data));
+    return NextResponse.json({ error: "Invalid link" }, { status: 404 });
+  }
   return NextResponse.json({ proposal: data });
 }
 
-// PATCH — client accepts or rejects
+// PATCH — client accepts or rejects (one-time only, uses admin to bypass RLS)
 export async function PATCH(req: Request) {
   const { token, action } = await req.json();
   if (!token || !["accepted", "rejected"].includes(action)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
+
+  // Only allow if still in draft/sent — prevent flipping after decision
+  const { data: existing } = await supabase
+    .from("proposals")
+    .select("status")
+    .eq("review_token", token)
+    .single();
+
+  if (!existing) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
+  if (existing.status === "accepted" || existing.status === "rejected") {
+    return NextResponse.json({ error: "Already decided" }, { status: 409 });
+  }
+
   const { error } = await supabase
     .from("proposals")
     .update({ status: action })

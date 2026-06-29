@@ -10,10 +10,10 @@ export function RevenueChart({ data }: { data: MonthData[] }) {
     <div className="w-full overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H + 40}`} className="w-full min-w-[400px]">
         {/* Grid lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map(f => {
+        {[0, 0.25, 0.5, 0.75, 1].map((f, fi) => {
           const y = PAD + (1 - f) * H;
           return (
-            <g key={f}>
+            <g key={fi}>
               <line x1={PAD} y1={y} x2={W - PAD} y2={y} stroke="currentColor" strokeOpacity={0.08} strokeWidth={1} />
               <text x={PAD - 6} y={y + 4} fontSize={9} textAnchor="end" fill="currentColor" fillOpacity={0.4}>
                 ₹{((max * f) / 1000).toFixed(0)}k
@@ -23,12 +23,12 @@ export function RevenueChart({ data }: { data: MonthData[] }) {
         })}
 
         {/* Bars */}
-        {data.map((d, i) => {
+        {data.map((d, i) => { // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const x = PAD + i * GAP + GAP / 2 - BAR_W / 2;
           const earnedH = (d.earned / max) * H;
           const unpaidH = (d.unpaid / max) * H;
           return (
-            <g key={d.month}>
+            <g key={i}>
               {/* Unpaid bar (stacked on top) */}
               {d.unpaid > 0 && (
                 <rect

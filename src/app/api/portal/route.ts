@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
@@ -20,13 +21,13 @@ export async function POST(req: Request) {
   return NextResponse.json({ token });
 }
 
-// GET — fetch portal data by token (public, no auth)
+// GET — fetch portal data by token (public, uses admin to bypass RLS)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const token = searchParams.get("token");
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: portal } = await supabase
     .from("client_portals")
