@@ -63,8 +63,10 @@ export async function GET(req: Request) {
 
   if (!portal) return NextResponse.json({ error: "Invalid link" }, { status: 404 });
 
-  const { data: clientData } = await supabase
-    .from("clients").select("name, email, company").eq("id", portal.client_id).single();
+  const [{ data: clientData }, { data: freelancerProfile }] = await Promise.all([
+    supabase.from("clients").select("name, email, company").eq("id", portal.client_id).single(),
+    supabase.from("profiles").select("plan").eq("id", portal.user_id).single(),
+  ]);
 
   const { data: invoices } = await supabase
     .from("invoices")
@@ -82,5 +84,5 @@ export async function GET(req: Request) {
   if (clientData?.name) proposalsQuery = proposalsQuery.ilike("title", `%${clientData.name}%`);
   const { data: proposals } = await proposalsQuery;
 
-  return NextResponse.json({ client: clientData, invoices, proposals });
+  return NextResponse.json({ client: clientData, invoices, proposals, freelancerPlan: freelancerProfile?.plan || "free" });
 }

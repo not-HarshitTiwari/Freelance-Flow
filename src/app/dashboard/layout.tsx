@@ -4,6 +4,7 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { PlanProvider } from "@/components/dashboard/PlanProvider";
 import { DashboardAdBanner } from "@/components/ads/DashboardAdBanner";
+import type { Plan } from "@/lib/plan-context";
 
 export default async function DashboardLayout({
   children,
@@ -20,7 +21,7 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
-  const plan = (profile?.plan as "free" | "pro") || "free";
+  const plan = (profile?.plan as Plan) || "free";
 
   return (
     <PlanProvider plan={plan}>

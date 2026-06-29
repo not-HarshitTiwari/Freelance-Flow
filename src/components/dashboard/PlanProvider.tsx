@@ -1,13 +1,7 @@
 "use client";
 
-import { PlanContext } from "@/lib/plan-context";
+import { PlanContext, type Plan } from "@/lib/plan-context";
 
-export function PlanProvider({
-  plan,
-  children,
-}: {
-  plan: "free" | "pro";
-  children: React.ReactNode;
-}) {
+export function PlanProvider({ plan, children }: { plan: Plan; children: React.ReactNode }) {
   return <PlanContext.Provider value={plan}>{children}</PlanContext.Provider>;
 }

@@ -14,10 +14,13 @@ export async function POST(request: Request) {
 
   const [{ data: invoice }, { data: profile }] = await Promise.all([
     supabase.from("invoices").select("*").eq("id", invoiceId).eq("user_id", user.id).single(),
-    supabase.from("profiles").select("smtp_email, smtp_password, full_name, business_name").eq("id", user.id).single(),
+    supabase.from("profiles").select("smtp_email, smtp_password, full_name, business_name, plan").eq("id", user.id).single(),
   ]);
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (!["pro", "advanced"].includes(profile?.plan || "")) {
+    return NextResponse.json({ error: "Email sending requires a Pro or Advanced plan." }, { status: 403 });
+  }
   if (!profile?.smtp_email || !profile?.smtp_password) {
     return NextResponse.json({ error: "SMTP not configured. Add Gmail credentials in Settings." }, { status: 400 });
   }

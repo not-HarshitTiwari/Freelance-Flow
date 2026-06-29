@@ -7,6 +7,12 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Email send requires Pro or Advanced
+  const { data: planProfile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  if (!["pro", "advanced"].includes(planProfile?.plan || "")) {
+    return NextResponse.json({ error: "Email sending requires a Pro or Advanced plan." }, { status: 403 });
+  }
+
   const { proposalId, toEmail, toName } = await request.json();
   if (!proposalId || !toEmail) {
     return NextResponse.json({ error: "Missing proposalId or toEmail" }, { status: 400 });

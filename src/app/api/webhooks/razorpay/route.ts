@@ -23,12 +23,14 @@ export async function POST(request: Request) {
   // ── Subscription events (plan upgrades/cancellations) ──────────────────────
   if (event.event === "subscription.activated") {
     const supabase = await createClient();
-    const userId = event.payload.subscription.entity.notes?.user_id;
+    const notes = event.payload.subscription.entity.notes ?? {};
+    const userId = notes.user_id;
     const subscriptionId = event.payload.subscription.entity.id;
+    const activatedPlan = ["basic", "pro", "advanced"].includes(notes.plan) ? notes.plan : "pro";
     if (userId) {
       await supabase
         .from("profiles")
-        .update({ plan: "pro", razorpay_subscription_id: subscriptionId })
+        .update({ plan: activatedPlan, razorpay_subscription_id: subscriptionId })
         .eq("id", userId);
     }
   }

@@ -8,8 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, FileSignature, Trash2, Send, Copy, Eye } from "lucide-react";
+import { Plus, FileSignature, Trash2, Send, Copy, Eye, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
+import Link from "next/link";
 
 type Contract = {
   id: string;
@@ -128,6 +130,8 @@ const statusColors: Record<string, string> = {
 };
 
 export default function ContractsPage() {
+  const plan = usePlan();
+  const canUseContracts = planAtLeast(plan, "basic");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [open, setOpen] = useState(false);
   const [viewContract, setViewContract] = useState<Contract | null>(null);
@@ -198,6 +202,17 @@ export default function ContractsPage() {
     toast.success("Deleted");
     fetchContracts();
   }
+
+  if (!canUseContracts) return (
+    <div className="text-center py-24">
+      <Lock size={48} className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Contracts require Basic plan or higher</h2>
+      <p className="text-gray-500 dark:text-gray-400 mb-6">Create legally binding agreements and collect e-signatures from clients.</p>
+      <Link href="/dashboard/upgrade">
+        <Button className="bg-violet-600 hover:bg-violet-700 text-white">Upgrade to Basic — ₹499/mo</Button>
+      </Link>
+    </div>
+  );
 
   return (
     <div>

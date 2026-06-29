@@ -88,26 +88,54 @@ export default function Sidebar({ user, plan }: { user: User; plan: string }) {
         ))}
       </nav>
 
-      {plan !== "pro" && (
+      {plan === "free" && (
         <div className="mx-3 mb-3 rounded-lg bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 p-3">
           <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1 flex items-center gap-1">
             <Crown size={12} /> Free Plan
           </p>
           <p className="text-xs text-violet-600 dark:text-violet-400 mb-2">
-            Upgrade to Pro to unlock AI proposals & all features.
+            Upgrade to unlock unlimited invoices, email sending & more.
           </p>
           <Link href="/dashboard/upgrade">
             <Button size="sm" className="w-full bg-violet-600 hover:bg-violet-700 h-7 text-xs text-white">
-              Upgrade — ₹999/mo
+              Upgrade Plan
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {plan === "basic" && (
+        <div className="mx-3 mb-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 p-3">
+          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1">
+            <Crown size={12} /> Basic Plan
+          </p>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">Upgrade to Pro for AI proposals & recurring invoices.</p>
+          <Link href="/dashboard/upgrade">
+            <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 h-7 text-xs text-white">
+              Upgrade to Pro
             </Button>
           </Link>
         </div>
       )}
 
       {plan === "pro" && (
-        <div className="mx-3 mb-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 p-2.5">
-          <p className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center gap-1">
-            <Crown size={12} /> Pro Plan Active
+        <div className="mx-3 mb-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 p-3">
+          <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1 flex items-center gap-1">
+            <Crown size={12} /> Pro Plan
+          </p>
+          <p className="text-xs text-green-600 dark:text-green-400 mb-2">Upgrade to Advanced for white-label & bulk tools.</p>
+          <Link href="/dashboard/upgrade">
+            <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 h-7 text-xs text-white">
+              Upgrade to Advanced
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {plan === "advanced" && (
+        <div className="mx-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 p-2.5">
+          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+            <Crown size={12} /> Advanced Plan
           </p>
         </div>
       )}

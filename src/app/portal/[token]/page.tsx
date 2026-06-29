@@ -16,7 +16,8 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
   const res = await fetch(`${appUrl}/api/portal?token=${token}`, { cache: "no-store" });
   if (!res.ok) notFound();
 
-  const { client, invoices, proposals } = await res.json();
+  const { client, invoices, proposals, freelancerPlan } = await res.json();
+  const whiteLabel = freelancerPlan === "advanced";
 
   const totalDue = invoices?.reduce((s: number, i: { status: string; total: number; amount_paid?: number | null }) => {
     if (i.status === "unpaid") return s + i.total;
@@ -147,7 +148,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-300 mt-12">Powered by FreelanceFlow</p>
+        {!whiteLabel && <p className="text-center text-xs text-gray-300 mt-12">Powered by FreelanceFlow</p>}
       </div>
     </div>
   );

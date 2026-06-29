@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
-import { usePlan } from "@/lib/plan-context";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string };
@@ -393,7 +393,14 @@ function InvoicesPageInner() {
   const [irnTarget, setIrnTarget] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const planCtx = usePlan();
-  const isPro = planCtx === "pro";
+  const isPro = planCtx !== "free";
+  const canSendEmail = planAtLeast(planCtx, "pro");
+  const canUseTemplates = planAtLeast(planCtx, "basic");
+  const canExportCSV = planAtLeast(planCtx, "basic");
+  const canRecurring = planAtLeast(planCtx, "pro");
+  const canPaymentLink = planAtLeast(planCtx, "pro");
+  const canBulkOps = planAtLeast(planCtx, "advanced");
+  const canCurrency = planAtLeast(planCtx, "advanced");
 
   const fetchInvoices = useCallback(async () => {
     const res = await fetch("/api/invoices");
@@ -798,7 +805,7 @@ function InvoicesPageInner() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Create GST-compliant invoices</p>
         </div>
         <div className="flex gap-2">
-          {invoices.length > 0 && (
+          {invoices.length > 0 && canExportCSV && (
             <button onClick={exportInvoicesCSV} className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors">
               <Download size={15} /> Export CSV
             </button>
@@ -968,10 +975,10 @@ function InvoicesPageInner() {
               <div className={sectionStyle}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className={sectionTitle}>Recurring Invoice</p>
+                    <p className={sectionTitle}>Recurring Invoice {!canRecurring && <span className="text-xs text-orange-500 font-normal ml-1">(Pro+)</span>}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Auto-generate this invoice on a schedule</p>
                   </div>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, is_recurring: !f.is_recurring }))}
+                  <button type="button" disabled={!canRecurring} onClick={() => canRecurring && setForm(f => ({ ...f, is_recurring: !f.is_recurring }))}
                     className={`relative w-10 h-5 rounded-full transition-colors ${form.is_recurring ? "bg-violet-600" : "bg-gray-300 dark:bg-gray-600"}`}>
                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.is_recurring ? "translate-x-5" : ""}`} />
                   </button>
@@ -1024,7 +1031,7 @@ function InvoicesPageInner() {
       )}
 
       {/* Bulk action bar */}
-      {bulkSelected.size > 0 && (
+      {canBulkOps && bulkSelected.size > 0 && (
         <div className="flex items-center justify-between bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-700 rounded-lg px-4 py-2.5 mb-4">
           <div className="flex items-center gap-3">
             <span className="text-sm text-violet-700 dark:text-violet-300 font-medium">{bulkSelected.size} selected</span>
@@ -1062,7 +1069,7 @@ function InvoicesPageInner() {
               {!isPro && i > 0 && i % 4 === 0 && <AdBanner format="rectangle" className="my-3" />}
             <Card className={`hover:shadow-md transition-shadow cursor-pointer ${bulkSelected.has(inv.id) ? "border-violet-400 dark:border-violet-600" : ""}`} onClick={() => { setSelected(inv); setPreviewTab("details"); }}>
               <CardContent className="p-4 flex items-center gap-3">
-                <input type="checkbox" checked={bulkSelected.has(inv.id)} onChange={e => { e.stopPropagation(); toggleBulk(inv.id); }} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-violet-600 shrink-0" />
+                {canBulkOps && <input type="checkbox" checked={bulkSelected.has(inv.id)} onChange={e => { e.stopPropagation(); toggleBulk(inv.id); }} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-violet-600 shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-900 dark:text-white">{inv.invoice_number}</p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
@@ -1086,7 +1093,7 @@ function InvoicesPageInner() {
                     </span>
                   )}
                   <button onClick={() => openEdit(inv)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Edit"><Pencil size={15} /></button>
-                  <button onClick={() => { setSendTarget(inv); setSendEmail(inv.customer_email || ""); setSendName(inv.customer_name || ""); setSendMessage(""); }} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Send by email"><Send size={16} /></button>
+                  {canSendEmail && <button onClick={() => { setSendTarget(inv); setSendEmail(inv.customer_email || ""); setSendName(inv.customer_name || ""); setSendMessage(""); }} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Send by email"><Send size={16} /></button>}
                   <button
                     onClick={() => {
                       const msg = encodeURIComponent(`Hi ${inv.customer_name || "there"}, please find your invoice ${inv.invoice_number} for ₹${inv.total.toLocaleString("en-IN")}${inv.due_date ? `, due on ${new Date(inv.due_date).toLocaleDateString("en-IN")}` : ""}. Please arrange payment. Thank you!`);
@@ -1104,9 +1111,9 @@ function InvoicesPageInner() {
                       <IndianRupee size={15} />
                     </button>
                   )}
-                  <button onClick={() => generatePaymentLink(inv)} disabled={generatingLink === inv.id || inv.status === "paid"} className="text-gray-400 hover:text-blue-600 disabled:opacity-30" title="Generate Razorpay payment link">
+                  {canPaymentLink && <button onClick={() => generatePaymentLink(inv)} disabled={generatingLink === inv.id || inv.status === "paid"} className="text-gray-400 hover:text-blue-600 disabled:opacity-30" title="Generate Razorpay payment link">
                     <Link2 size={15} className={generatingLink === inv.id ? "animate-pulse" : ""} />
-                  </button>
+                  </button>}
                   {inv.seller_gstin && <button onClick={() => setIrnTarget(inv)} className="text-gray-400 hover:text-violet-600" title="Generate E-Invoice JSON"><FileCode size={15} /></button>}
                   <button onClick={() => duplicateInvoice(inv)} className="text-gray-400 hover:text-violet-600" title="Duplicate invoice"><Copy size={15} /></button>
                   <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
@@ -1280,25 +1287,32 @@ function InvoicesPageInner() {
               {/* Template + Currency row */}
               <div className="flex items-end gap-4">
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Template</p>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">
+                    Template {!canUseTemplates && <span className="text-orange-500 font-normal normal-case">(Basic+)</span>}
+                  </p>
                   <div className="flex gap-1.5">
-                    {PDF_TEMPLATES.map(t => (
-                      <button key={t.id} onClick={() => setPdfTemplate(t.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
-                        {t.label}
-                      </button>
-                    ))}
+                    {PDF_TEMPLATES.map(t => {
+                      const locked = !canUseTemplates && t.id !== "classic";
+                      return (
+                        <button key={t.id} onClick={() => !locked && setPdfTemplate(t.id)} disabled={locked}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${locked ? "opacity-40 cursor-not-allowed border-gray-200 dark:border-gray-700 text-gray-400" : pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
+                          {t.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Currency</p>
-                  <select value={currency} onChange={async e => {
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">
+                    Currency {!canCurrency && <span className="text-orange-500 font-normal normal-case">(Advanced)</span>}
+                  </p>
+                  <select disabled={!canCurrency} value={currency} onChange={async e => {
                     const c = e.target.value; setCurrency(c);
                     if (c !== "INR") {
                       const data = await fetch(`/api/exchange-rates?base=INR`).then(r => r.json());
                       if (data.rates?.[c]) setExchangeRate(data.rates[c]);
                     } else { setExchangeRate(1); }
-                  }} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-sm outline-none">
+                  }} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-sm outline-none disabled:opacity-40 disabled:cursor-not-allowed">
                     {Object.entries(CURRENCIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </div>
@@ -1322,9 +1336,9 @@ function InvoicesPageInner() {
                 <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
                   <Download size={16} /> Download PDF
                 </Button>
-                <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
+                {canSendEmail && <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
                   <Send size={16} /> Send Email
-                </Button>
+                </Button>}
               </div>
             </div>
             </div>

@@ -27,6 +27,15 @@ export async function POST(request: Request) {
   const igst = gst_type === "igst" ? totalGst : 0;
   const total = subtotal + totalGst;
 
+  // Free plan: max 5 invoices total
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  if (!profile?.plan || profile.plan === "free") {
+    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", user.id);
+    if ((count ?? 0) >= 5) {
+      return NextResponse.json({ error: "Free plan limit reached. Upgrade to Basic or higher to create unlimited invoices." }, { status: 403 });
+    }
+  }
+
   const invoiceNumber = await generateInvoiceNumber(supabase, user.id);
 
   const { data, error } = await supabase.from("invoices").insert({

@@ -15,10 +15,6 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
-  if (profile?.plan !== "pro") {
-    return NextResponse.json({ error: "Upgrade to Pro to generate proposals." }, { status: 403 });
-  }
-
   const { projectDescription, clientName, clientEmail, clientCompany, budget, timeline } = await request.json();
 
   // Build sender info — only include fields that are actually set

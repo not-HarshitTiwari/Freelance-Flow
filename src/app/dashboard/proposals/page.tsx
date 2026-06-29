@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2, Search, ThumbsUp, ThumbsDown } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
-import { usePlan } from "@/lib/plan-context";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type Proposal = {
@@ -53,9 +53,12 @@ export default function ProposalsPage() {
   const [sendName, setSendName] = useState("");
   const [sending, setSending] = useState(false);
   const planCtx = usePlan();
+  const canSendEmail = planAtLeast(planCtx, "pro");
   const [isPro, setIsPro] = useState(false);
   const [rewardedOpen, setRewardedOpen] = useState(false);
   const [pendingGenerate, setPendingGenerate] = useState(false);
+  const [adsRequired, setAdsRequired] = useState(0);
+  const [adsWatched, setAdsWatched] = useState(0);
   const [searchQ, setSearchQ] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -83,7 +86,7 @@ export default function ProposalsPage() {
         supabase.from("profiles").select("plan").eq("id", user.id).single(),
         supabase.from("clients").select("id, name, email, company").eq("user_id", user.id).order("name"),
       ]);
-      setIsPro(profile?.plan === "pro" || planCtx === "pro");
+      setIsPro((profile?.plan !== "free" && !!profile?.plan) || planAtLeast(planCtx, "basic"));
       setClients(clientData || []);
     });
   }, [fetchProposals]);
@@ -106,8 +109,7 @@ export default function ProposalsPage() {
     fetchProposals();
   }
 
-  async function handleGenerate(e: React.FormEvent) {
-    e.preventDefault();
+  async function doGenerate() {
     setGenerating(true);
     try {
       const res = await fetch("/api/proposals", {
@@ -127,6 +129,38 @@ export default function ProposalsPage() {
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    const now = new Date();
+    const thisMonthCount = proposals.filter(p => {
+      const d = new Date(p.created_at);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+
+    // Free: always 2 ads
+    if (!planAtLeast(planCtx, "basic")) {
+      setAdsRequired(2); setAdsWatched(0); setOpen(false); setRewardedOpen(true); return;
+    }
+    // Basic: 5 free/month, then 2 ads each
+    if (!planAtLeast(planCtx, "pro")) {
+      if (thisMonthCount >= 5) {
+        toast.info(`You've used your 5 free proposals this month. Watch 2 ads to generate more.`);
+        setAdsRequired(2); setAdsWatched(0); setOpen(false); setRewardedOpen(true); return;
+      }
+      await doGenerate(); return;
+    }
+    // Pro: 50 free/month, then 1 ad each
+    if (!planAtLeast(planCtx, "advanced")) {
+      if (thisMonthCount >= 50) {
+        toast.info(`You've used your 50 free proposals this month. Watch 1 ad to generate more.`);
+        setAdsRequired(1); setAdsWatched(0); setOpen(false); setRewardedOpen(true); return;
+      }
+      await doGenerate(); return;
+    }
+    // Advanced: unlimited
+    await doGenerate();
   }
 
   async function saveEdit() {
@@ -185,7 +219,20 @@ export default function ProposalsPage() {
   }
 
   async function generateAfterAd() {
+    const newWatched = adsWatched + 1;
+    setAdsWatched(newWatched);
+    setRewardedOpen(false);
+
+    // If more ads still required, re-open the modal for the next ad
+    if (newWatched < adsRequired) {
+      setTimeout(() => setRewardedOpen(true), 300);
+      return;
+    }
+
+    // All ads watched — generate the proposal
     setPendingGenerate(false);
+    setAdsWatched(0);
+    setAdsRequired(0);
     setGenerating(true);
     try {
       const res = await fetch("/api/proposals", {
@@ -212,19 +259,19 @@ export default function ProposalsPage() {
       <RewardedAdModal
         open={rewardedOpen}
         title="Generate Proposal"
-        description="Watch a short ad to generate one AI proposal for free"
+        description={adsRequired > 1 ? `Watch ad ${adsWatched + 1} of ${adsRequired} to generate this proposal` : "Watch a short ad to generate an AI proposal"}
         onRewarded={generateAfterAd}
-        onClose={() => { setRewardedOpen(false); setPendingGenerate(false); }}
+        onClose={() => { setRewardedOpen(false); setPendingGenerate(false); setAdsWatched(0); setAdsRequired(0); }}
       />
 
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Proposals</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {isPro ? "Generate AI-powered proposals in seconds" : "Watch an ad to generate proposals for free"}
+            {planAtLeast(planCtx, "advanced") ? "Unlimited AI proposals" : planAtLeast(planCtx, "pro") ? "50 free AI proposals/month, then watch 1 ad" : planAtLeast(planCtx, "basic") ? "5 free AI proposals/month, then watch 2 ads" : "Watch 2 ads per AI proposal"}
           </p>
         </div>
-        {isPro ? (
+        {planAtLeast(planCtx, "basic") ? (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
             <Sparkles size={16} /> Generate Proposal
@@ -330,12 +377,12 @@ export default function ProposalsPage() {
           <div className="flex gap-2">
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger className="inline-flex items-center gap-2 border border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400 text-sm font-medium px-3 h-8 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
-                <Sparkles size={16} /> Watch Ad &amp; Generate
+                <Sparkles size={16} /> Watch 2 Ads &amp; Generate
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader><DialogTitle>Generate AI Proposal (Free)</DialogTitle></DialogHeader>
-                <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">Fill in details, then watch a short ad to generate.</p>
-                <form onSubmit={e => { e.preventDefault(); setPendingGenerate(true); setOpen(false); setRewardedOpen(true); }} className="space-y-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">Fill in details, then watch 2 short ads to generate.</p>
+                <form onSubmit={handleGenerate} className="space-y-4">
                   {clients.length > 0 && (
                     <div className="space-y-2">
                       <Label>Pick a saved client (optional)</Label>
@@ -355,13 +402,13 @@ export default function ProposalsPage() {
                     <div className="space-y-2"><Label>Budget (₹)</Label><Input type="number" placeholder="50000" value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} /></div>
                     <div className="space-y-2"><Label>Timeline</Label><Input placeholder="4 weeks" value={form.timeline} onChange={e => setForm({ ...form, timeline: e.target.value })} /></div>
                   </div>
-                  <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2"><Sparkles size={16} /> Continue to Ad</Button>
+                  <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2"><Sparkles size={16} /> Continue to Ads</Button>
                 </form>
               </DialogContent>
             </Dialog>
             <Link href="/dashboard/upgrade">
               <Button className="bg-violet-600 hover:bg-violet-700 text-white text-sm h-8 gap-1.5">
-                <Sparkles size={14} /> Upgrade to Pro
+                <Sparkles size={14} /> Upgrade
               </Button>
             </Link>
           </div>
@@ -435,6 +482,7 @@ export default function ProposalsPage() {
                     >
                       <Pencil size={15} />
                     </button>
+                    {canSendEmail && (
                     <button
                       onClick={() => { setSendTarget(p); setSendEmail(""); setSendName(""); }}
                       className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
@@ -442,6 +490,7 @@ export default function ProposalsPage() {
                     >
                       <Send size={15} />
                     </button>
+                    )}
                     <button
                       onClick={async () => {
                         const res = await fetch("/api/proposals/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposalId: p.id }) });

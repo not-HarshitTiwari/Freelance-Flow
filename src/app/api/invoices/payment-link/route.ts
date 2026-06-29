@@ -9,6 +9,11 @@ export async function POST(request: Request) {
 
   const { invoiceId } = await request.json();
 
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  if (!profile?.plan || !["pro", "advanced"].includes(profile.plan)) {
+    return NextResponse.json({ error: "Razorpay payment links require a Pro or Advanced plan." }, { status: 403 });
+  }
+
   const { data: invoice } = await supabase
     .from("invoices")
     .select("id, total, amount_paid, invoice_number, customer_name, customer_email, payment_link, payment_link_id")

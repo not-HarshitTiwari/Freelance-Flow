@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Trash2, IndianRupee, Pencil, Download, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdBanner } from "@/components/ads/AdBanner";
-import { usePlan } from "@/lib/plan-context";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type Expense = {
@@ -27,7 +27,10 @@ const CATEGORIES = ["Software", "Hardware", "Marketing", "Travel", "Office", "Fr
 const empty = { title: "", amount: "", category: "Software", date: new Date().toISOString().slice(0, 10), notes: "", receipt_url: "" };
 
 export default function ExpensesPage() {
-  const isPro = usePlan() === "pro";
+  const plan = usePlan();
+  const isPro = plan !== "free";
+  const canUploadReceipt = planAtLeast(plan, "basic");
+  const canExportCSV = planAtLeast(plan, "basic");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
@@ -125,7 +128,7 @@ export default function ExpensesPage() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Track what you spend — see real profit</p>
         </div>
         <div className="flex gap-2">
-          {expenses.length > 0 && (
+          {expenses.length > 0 && canExportCSV && (
             <button onClick={exportCSV} className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors">
               <Download size={15} /> Export CSV
             </button>
@@ -161,6 +164,7 @@ export default function ExpensesPage() {
                 <Label>Notes</Label>
                 <Input placeholder="Optional note" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
+              {canUploadReceipt && (
               <div className="space-y-1.5">
                 <Label>Receipt</Label>
                 {form.receipt_url ? (
@@ -176,6 +180,7 @@ export default function ExpensesPage() {
                   </label>
                 )}
               </div>
+              )}
               <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving || uploadingReceipt}>
                 {saving ? "Saving..." : editing ? "Save Changes" : "Add Expense"}
               </Button>

@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   const invoices = (rawInvoices ?? []) as InvRow[];
   const expenses = (rawExpenses ?? []) as ExpRow[];
 
-  const isPro = profile?.plan === "pro";
+  const isPro = profile?.plan !== "free";
 
   // Onboarding checklist
   const onboardingSteps = [

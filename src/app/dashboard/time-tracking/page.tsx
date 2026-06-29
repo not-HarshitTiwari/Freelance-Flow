@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Trash2, Play, Square, Clock, FileText, Pencil, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 
 type Entry = {
   id: string;
@@ -24,6 +25,8 @@ type Entry = {
 const emptyForm = { description: "", client_name: "", hours: "", rate: "", date: new Date().toISOString().slice(0, 10) };
 
 export default function TimeTrackingPage() {
+  const plan = usePlan();
+  const canExportCSV = planAtLeast(plan, "basic");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -179,7 +182,7 @@ export default function TimeTrackingPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Track billable hours and convert to invoices</p>
         </div>
         <div className="flex gap-2">
-          {entries.length > 0 && (
+          {entries.length > 0 && canExportCSV && (
             <Button onClick={exportCSV} variant="outline" className="gap-2 h-8 text-sm px-3 dark:border-gray-600 dark:text-gray-300">
               <Download size={15} /> Export CSV
             </Button>

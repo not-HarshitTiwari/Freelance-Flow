@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { usePlan } from "@/lib/plan-context";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,8 @@ type Client = {
 const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
 
 export default function ClientsPage() {
-  const isPro = usePlan() === "pro";
+  const plan = usePlan();
+  const isPro = plan !== "free";
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -74,6 +76,10 @@ export default function ClientsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (plan === "free" && clients.length >= 3) {
+      toast.error("Free plan limit: max 3 clients. Upgrade to add unlimited clients.");
+      return;
+    }
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -144,7 +150,10 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage your client relationships</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+            Manage your client relationships
+            {plan === "free" && <span className="ml-2 text-orange-500 font-medium">{clients.length}/3 used</span>}
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
