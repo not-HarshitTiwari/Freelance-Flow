@@ -261,7 +261,7 @@ export default function InvoicesPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Invoice | null>(null);
-  const [pdfColor, setPdfColor] = useState<string | null>("#7c3aed");
+  const [pdfColor, setPdfColor] = useState<string | null>(null);
   const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
   const [currency, setCurrency] = useState("INR");
   const [items, setItems] = useState<InvoiceItem[]>([{ description: "", quantity: 1, rate: 0 }]);
@@ -286,6 +286,9 @@ export default function InvoicesPage() {
   }, []);
 
   useEffect(() => {
+    setPdfTemplate((localStorage.getItem("inv_template") as PdfTemplate) || "classic");
+    setPdfColor(localStorage.getItem("inv_color") || "#7c3aed");
+    setCurrency(localStorage.getItem("inv_currency") || "INR");
     fetchInvoices();
     fetch("/api/profile").then(r => r.json()).then(({ profile }: { profile: Profile }) => {
       if (profile) setForm(f => ({

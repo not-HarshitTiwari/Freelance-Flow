@@ -8,6 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
+type PdfTemplate = "classic" | "minimal" | "bold";
+const PDF_TEMPLATES: { id: PdfTemplate; label: string }[] = [
+  { id: "classic", label: "Classic" },
+  { id: "minimal", label: "Minimal" },
+  { id: "bold", label: "Bold" },
+];
+const ACCENT_COLORS = ["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"];
+const CURRENCIES: Record<string, string> = {
+  INR: "INR — Indian Rupee", USD: "USD — US Dollar", EUR: "EUR — Euro",
+  GBP: "GBP — British Pound", AED: "AED — UAE Dirham", SGD: "SGD — Singapore Dollar",
+};
+
 const emptyForm = {
   full_name: "", business_name: "", business_address: "",
   email: "", phone: "", gstin: "",
@@ -20,8 +32,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
+  const [pdfColor, setPdfColor] = useState<string>("#7c3aed");
+  const [currency, setCurrency] = useState("INR");
 
   useEffect(() => {
+    setPdfTemplate((localStorage.getItem("inv_template") as PdfTemplate) || "classic");
+    setPdfColor(localStorage.getItem("inv_color") || "#7c3aed");
+    setCurrency(localStorage.getItem("inv_currency") || "INR");
     fetch("/api/profile").then(r => r.json()).then(({ profile }) => {
       if (profile) setForm({
         full_name: profile.full_name || "",
@@ -135,6 +153,53 @@ export default function SettingsPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Invoice PDF Defaults */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base dark:text-white">Invoice PDF Defaults</CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Default template, color, and currency used when downloading invoices.</p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Template */}
+            <div className="space-y-2">
+              <Label>Template</Label>
+              <div className="flex gap-2">
+                {PDF_TEMPLATES.map(t => (
+                  <button key={t.id} type="button" onClick={() => { setPdfTemplate(t.id); localStorage.setItem("inv_template", t.id); }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Currency */}
+            <div className="space-y-2">
+              <Label>Default Currency</Label>
+              <select value={currency} onChange={e => { setCurrency(e.target.value); localStorage.setItem("inv_currency", e.target.value); }}
+                className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-3 text-sm outline-none">
+                {Object.entries(CURRENCIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            {/* Accent Color */}
+            <div className="space-y-2">
+              <Label>Accent Color</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {ACCENT_COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => { setPdfColor(c); localStorage.setItem("inv_color", c); }}
+                    className="w-8 h-8 rounded-full border-2 transition-all"
+                    style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
+                ))}
+                <label className="relative w-8 h-8 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer" title="Custom color">
+                  <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    value={pdfColor} onChange={e => { setPdfColor(e.target.value); localStorage.setItem("inv_color", e.target.value); }} />
+                  <span className="flex items-center justify-center w-full h-full text-xs text-gray-400">+</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Used as the header/highlight color in the PDF.</p>
             </div>
           </CardContent>
         </Card>
