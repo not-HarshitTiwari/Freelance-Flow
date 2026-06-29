@@ -15,8 +15,6 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
-  console.log("PROFILE DATA:", JSON.stringify(profile));
-
   if (profile?.plan !== "pro") {
     return NextResponse.json({ error: "Upgrade to Pro to generate proposals." }, { status: 403 });
   }

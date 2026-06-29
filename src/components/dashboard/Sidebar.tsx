@@ -18,6 +18,8 @@ import {
   Moon,
   Wallet,
   Calculator,
+  Clock,
+  FileSignature,
 } from "lucide-react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
@@ -30,6 +32,8 @@ const navItems = [
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
+  { href: "/dashboard/time-tracking", label: "Time Tracking", icon: Clock },
+  { href: "/dashboard/contracts", label: "Contracts", icon: FileSignature },
   { href: "/dashboard/tax-report", label: "Tax Report", icon: Calculator },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2 } from "lucide-react";
+import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2, Search, ThumbsUp, ThumbsDown } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan } from "@/lib/plan-context";
@@ -56,6 +56,8 @@ export default function ProposalsPage() {
   const [isPro, setIsPro] = useState(false);
   const [rewardedOpen, setRewardedOpen] = useState(false);
   const [pendingGenerate, setPendingGenerate] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [statusF, setStatusF] = useState("all");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [form, setForm] = useState({
     clientName: "",
@@ -168,6 +170,18 @@ export default function ProposalsPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function updateStatus(id: string, status: string) {
+    const res = await fetch("/api/proposals", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    const data = await res.json();
+    if (data.error) { toast.error(data.error); return; }
+    toast.success(`Marked as ${status}`);
+    fetchProposals();
   }
 
   async function generateAfterAd() {
@@ -356,6 +370,23 @@ export default function ProposalsPage() {
 
       {!isPro && proposals.length > 0 && <AdBanner format="horizontal" className="mb-6" />}
 
+      {proposals.length > 0 && (
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="relative flex-1 min-w-48">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Input placeholder="Search proposals…" value={searchQ} onChange={e => setSearchQ(e.target.value)} className="pl-9 h-9 text-sm" />
+          </div>
+          <div className="flex gap-1.5">
+            {["all", "draft", "sent", "accepted", "rejected"].map(s => (
+              <button key={s} onClick={() => setStatusF(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border capitalize transition-colors ${statusF === s ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400"}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {proposals.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <FileText size={48} className="mx-auto mb-4 opacity-30" />
@@ -364,9 +395,21 @@ export default function ProposalsPage() {
             {isPro ? "Click \"Generate Proposal\" to create your first one" : "Watch an ad to generate your first proposal"}
           </p>
         </div>
-      ) : (
+      ) : (() => {
+        const filtered = proposals.filter(p => {
+          const q = searchQ.toLowerCase();
+          return (!q || p.title.toLowerCase().includes(q)) && (statusF === "all" || p.status === statusF);
+        });
+        if (filtered.length === 0) return (
+          <div className="text-center py-16 text-gray-400 dark:text-gray-600">
+            <Search size={36} className="mx-auto mb-3 opacity-30" />
+            <p className="text-base font-medium dark:text-gray-400">No proposals match your filter</p>
+            <button onClick={() => { setSearchQ(""); setStatusF("all"); }} className="text-sm text-violet-500 underline mt-1">Clear filters</button>
+          </div>
+        );
+        return (
         <div className="space-y-3">
-          {proposals.map((p, i) => (
+          {filtered.map((p, i) => (
             <div key={p.id}>
               {!isPro && i > 0 && i % 3 === 0 && (
                 <AdBanner format="rectangle" className="my-3" />
@@ -411,6 +454,24 @@ export default function ProposalsPage() {
                     >
                       <Link2 size={15} />
                     </button>
+                    {p.status !== "accepted" && (
+                      <button
+                        onClick={() => updateStatus(p.id, "accepted")}
+                        className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+                        title="Mark as accepted"
+                      >
+                        <ThumbsUp size={15} />
+                      </button>
+                    )}
+                    {p.status !== "rejected" && (
+                      <button
+                        onClick={() => updateStatus(p.id, "rejected")}
+                        className="text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                        title="Mark as rejected"
+                      >
+                        <ThumbsDown size={15} />
+                      </button>
+                    )}
                     <button
                       onClick={() => deleteProposal(p.id)}
                       className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"
@@ -424,7 +485,8 @@ export default function ProposalsPage() {
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {/* View Proposal Dialog */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>

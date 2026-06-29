@@ -16,16 +16,12 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  console.log("PROFILE PATCH body:", JSON.stringify(body));
 
-  // Try update first; if no rows affected, upsert
   const { data, error } = await supabase
     .from("profiles")
     .upsert({ id: user.id, ...body }, { onConflict: "id" })
     .select()
     .single();
-
-  console.log("PROFILE PATCH result:", JSON.stringify(data), "error:", error?.message);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ profile: data });
 }

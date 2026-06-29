@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { invoiceId, toEmail, toName, message } = await request.json();
+  const { invoiceId, toEmail, toName, message, pdfBase64 } = await request.json();
   if (!invoiceId || !toEmail) {
     return NextResponse.json({ error: "Missing invoiceId or toEmail" }, { status: 400 });
   }
@@ -140,17 +140,21 @@ export async function POST(request: Request) {
       auth: { user: profile.smtp_email, pass: profile.smtp_password },
     });
 
+    const attachments = pdfBase64
+      ? [{ filename: `Invoice-${invoice.invoice_number}.pdf`, content: Buffer.from(pdfBase64.split(",")[1], "base64"), contentType: "application/pdf" }]
+      : [];
+
     await transporter.sendMail({
       from: `"${senderName}" <${profile.smtp_email}>`,
       to: toName ? `"${toName}" <${toEmail}>` : toEmail,
       subject: `Invoice ${invoice.invoice_number} from ${senderName}`,
       html,
+      attachments,
     });
 
     return NextResponse.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("Invoice email error:", msg);
     return NextResponse.json({ error: `Failed to send: ${msg}` }, { status: 500 });
   }
 }

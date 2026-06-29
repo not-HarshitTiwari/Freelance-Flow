@@ -1,5 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { generateInvoiceNumber } from "@/lib/invoice-number";
 
 // Vercel cron calls this every day at 8am IST
 export async function GET(req: Request) {
@@ -8,7 +9,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
 
   // Find recurring invoices due today or earlier
@@ -24,15 +25,16 @@ export async function GET(req: Request) {
   let created = 0;
 
   for (const inv of recurringInvoices) {
-    // Create new invoice as copy, reset status to unpaid
     const newDate = new Date();
     const newDueDate = inv.due_date
       ? new Date(newDate.getTime() + (new Date(inv.due_date).getTime() - new Date(inv.invoice_date || inv.created_at).getTime()))
       : null;
 
+    const invoiceNumber = await generateInvoiceNumber(supabase, inv.user_id);
+
     const { error } = await supabase.from("invoices").insert({
       user_id: inv.user_id,
-      invoice_number: `${inv.invoice_number}-R${Date.now()}`,
+      invoice_number: invoiceNumber,
       invoice_date: today,
       due_date: newDueDate?.toISOString().slice(0, 10) ?? null,
       seller_name: inv.seller_name,
@@ -47,28 +49,32 @@ export async function GET(req: Request) {
       customer_gstin: inv.customer_gstin,
       items: inv.items,
       subtotal: inv.subtotal,
+      tax: inv.tax,
+      cgst: inv.cgst,
+      sgst: inv.sgst,
+      igst: inv.igst,
+      gst_type: inv.gst_type,
       gst_rate: inv.gst_rate,
-      gst_amount: inv.gst_amount,
       total: inv.total,
       notes: inv.notes,
       terms: inv.terms,
       payment_method: inv.payment_method,
+      payment_methods: inv.payment_methods,
       upi_id: inv.upi_id,
       bank_account_name: inv.bank_account_name,
       bank_account_number: inv.bank_account_number,
       bank_ifsc: inv.bank_ifsc,
       bank_name: inv.bank_name,
       status: "unpaid",
-      is_recurring: false, // copy is not recurring itself
+      is_recurring: false,
     });
 
     if (!error) {
-      // Advance next_invoice_date based on recurrence_interval
       const next = new Date();
       const interval = inv.recurrence_interval || "monthly";
       if (interval === "weekly") next.setDate(next.getDate() + 7);
       else if (interval === "quarterly") next.setMonth(next.getMonth() + 3);
-      else next.setMonth(next.getMonth() + 1); // monthly default
+      else next.setMonth(next.getMonth() + 1);
 
       await supabase.from("invoices")
         .update({ next_invoice_date: next.toISOString().slice(0, 10) })

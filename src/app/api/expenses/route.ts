@@ -22,11 +22,11 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { title, amount, category, date, notes } = body;
+  const { title, amount, category, date, notes, receipt_url } = body;
 
   const { data, error } = await supabase
     .from("expenses")
-    .insert({ user_id: user.id, title, amount: parseFloat(amount), category, date, notes: notes || null })
+    .insert({ user_id: user.id, title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: receipt_url || null })
     .select()
     .single();
 
@@ -39,10 +39,10 @@ export async function PATCH(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, title, amount, category, date, notes } = await req.json();
+  const { id, title, amount, category, date, notes, receipt_url } = await req.json();
   const { error } = await supabase
     .from("expenses")
-    .update({ title, amount: parseFloat(amount), category, date, notes: notes || null })
+    .update({ title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: receipt_url ?? undefined })
     .eq("id", id)
     .eq("user_id", user.id);
 

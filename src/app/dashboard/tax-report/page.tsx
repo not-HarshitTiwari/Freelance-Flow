@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 type Invoice = {
   invoice_number: string; invoice_date: string; customer_name: string; customer_gstin: string | null;
-  subtotal: number; gst_rate: number; gst_amount: number; cgst: number | null; sgst: number | null;
+  subtotal: number; gst_rate: number; tax: number | null; cgst: number | null; sgst: number | null;
   igst: number | null; total: number; gst_type: string; status: string;
 };
 
@@ -47,7 +47,7 @@ export default function TaxReportPage() {
     cgst: paid.reduce((s, i) => s + (i.cgst ?? 0), 0),
     sgst: paid.reduce((s, i) => s + (i.sgst ?? 0), 0),
     igst: paid.reduce((s, i) => s + (i.igst ?? 0), 0),
-    gst: paid.reduce((s, i) => s + i.gst_amount, 0),
+    gst: paid.reduce((s, i) => s + (i.tax ?? ((i.cgst ?? 0) + (i.sgst ?? 0) + (i.igst ?? 0))), 0),
     total: paid.reduce((s, i) => s + i.total, 0),
   };
 
@@ -58,7 +58,7 @@ export default function TaxReportPage() {
       month: MONTHS[m],
       invoices: mInv.length,
       subtotal: mInv.reduce((s, i) => s + i.subtotal, 0),
-      gst: mInv.reduce((s, i) => s + i.gst_amount, 0),
+      gst: mInv.reduce((s, i) => s + (i.tax ?? ((i.cgst ?? 0) + (i.sgst ?? 0) + (i.igst ?? 0))), 0),
       total: mInv.reduce((s, i) => s + i.total, 0),
     };
   });
@@ -68,7 +68,7 @@ export default function TaxReportPage() {
       ["Invoice #", "Date", "Customer", "Customer GSTIN", "Subtotal", "CGST", "SGST", "IGST", "Total GST", "Grand Total", "GST Type"],
       ...paid.map(i => [
         i.invoice_number, i.invoice_date, i.customer_name, i.customer_gstin || "",
-        i.subtotal, i.cgst ?? 0, i.sgst ?? 0, i.igst ?? 0, i.gst_amount, i.total, i.gst_type,
+        i.subtotal, i.cgst ?? 0, i.sgst ?? 0, i.igst ?? 0, i.tax, i.total, i.gst_type,
       ]),
       [],
       ["TOTAL", "", "", "", totals.subtotal, totals.cgst, totals.sgst, totals.igst, totals.gst, totals.total, ""],

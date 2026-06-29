@@ -3,13 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
-// POST — generate portal token for a client
+// POST — generate portal token for a client, optionally email the link
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { clientId } = await req.json();
+  const { clientId, sendEmail: doEmail } = await req.json();
   const token = randomBytes(32).toString("hex");
 
   const { error } = await supabase.from("client_portals").upsert(
@@ -18,6 +18,32 @@ export async function POST(req: Request) {
   );
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (doEmail) {
+    const [{ data: client }, { data: profile }] = await Promise.all([
+      supabase.from("clients").select("name, email").eq("id", clientId).single(),
+      supabase.from("profiles").select("smtp_email, smtp_password, business_name, full_name").eq("id", user.id).single(),
+    ]);
+    if (client?.email && profile?.smtp_email && profile?.smtp_password) {
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const portalUrl = `${appUrl}/portal/${token}`;
+        const senderName = profile.business_name || profile.full_name || "Your Freelancer";
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: profile.smtp_email, pass: profile.smtp_password },
+        });
+        await transporter.sendMail({
+          from: `"${senderName}" <${profile.smtp_email}>`,
+          to: client.email,
+          subject: `Your client portal — ${senderName}`,
+          html: `<p>Hi ${client.name},</p><p>You can view your invoices and proposals here:</p><p><a href="${portalUrl}" style="color:#7c3aed;font-weight:bold">${portalUrl}</a></p><p>— ${senderName}</p>`,
+        });
+      } catch { /* don't fail if email fails */ }
+    }
+  }
+
   return NextResponse.json({ token });
 }
 
@@ -42,10 +68,19 @@ export async function GET(req: Request) {
 
   const { data: invoices } = await supabase
     .from("invoices")
-    .select("invoice_number, invoice_date, due_date, total, status, items, gst_amount, subtotal, payment_method, upi_id, notes")
+    .select("id, invoice_number, invoice_date, due_date, total, status, items, subtotal, tax, cgst, sgst, igst, gst_type, gst_rate, payment_method, payment_methods, upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name, transaction_id, notes, terms, seller_name, seller_address, seller_email, seller_phone, seller_gstin, customer_name, customer_company, customer_address, customer_gstin, payment_link, amount_paid")
     .eq("user_id", portal.user_id)
-    .or(`customer_email.eq.${clientData?.email},customer_name.eq.${clientData?.name}`)
+    .or(`customer_email.ilike.${clientData?.email ?? ""},customer_name.ilike.${clientData?.name ?? ""}`)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ client: clientData, invoices });
+  let proposalsQuery = supabase
+    .from("proposals")
+    .select("id, title, status, created_at, project_type")
+    .eq("user_id", portal.user_id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (clientData?.name) proposalsQuery = proposalsQuery.ilike("title", `%${clientData.name}%`);
+  const { data: proposals } = await proposalsQuery;
+
+  return NextResponse.json({ client: clientData, invoices, proposals });
 }

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, IndianRupee, Pencil } from "lucide-react";
+import { Plus, Trash2, IndianRupee, Pencil, Download, Paperclip } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
@@ -18,11 +19,12 @@ type Expense = {
   category: string;
   date: string;
   notes: string | null;
+  receipt_url: string | null;
 };
 
 const CATEGORIES = ["Software", "Hardware", "Marketing", "Travel", "Office", "Freelancer", "Tax", "Other"];
 
-const empty = { title: "", amount: "", category: "Software", date: new Date().toISOString().slice(0, 10), notes: "" };
+const empty = { title: "", amount: "", category: "Software", date: new Date().toISOString().slice(0, 10), notes: "", receipt_url: "" };
 
 export default function ExpensesPage() {
   const isPro = usePlan() === "pro";
@@ -31,6 +33,7 @@ export default function ExpensesPage() {
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
   const fetchExpenses = useCallback(async () => {
     const res = await fetch("/api/expenses");
@@ -72,8 +75,38 @@ export default function ExpensesPage() {
 
   function openEdit(e: Expense) {
     setEditing(e);
-    setForm({ title: e.title, amount: String(e.amount), category: e.category, date: e.date, notes: e.notes || "" });
+    setForm({ title: e.title, amount: String(e.amount), category: e.category, date: e.date, notes: e.notes || "", receipt_url: e.receipt_url || "" });
     setOpen(true);
+  }
+
+  async function uploadReceipt(file: File) {
+    setUploadingReceipt(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+      const ext = file.name.split(".").pop();
+      const path = `receipts/${user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("logos").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("logos").getPublicUrl(path);
+      setForm(f => ({ ...f, receipt_url: publicUrl }));
+      toast.success("Receipt uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally { setUploadingReceipt(false); }
+  }
+
+  function exportCSV() {
+    const rows = [["Date", "Title", "Category", "Amount (₹)", "Notes", "Receipt"]];
+    for (const e of expenses) {
+      rows.push([e.date, e.title, e.category, String(e.amount), e.notes || "", e.receipt_url || ""]);
+    }
+    const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "expenses.csv"; a.click();
+    URL.revokeObjectURL(url);
   }
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
@@ -91,6 +124,12 @@ export default function ExpensesPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Expenses</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Track what you spend — see real profit</p>
         </div>
+        <div className="flex gap-2">
+          {expenses.length > 0 && (
+            <button onClick={exportCSV} className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+              <Download size={15} /> Export CSV
+            </button>
+          )}
         <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { setEditing(null); setForm(empty); } }}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
             <Plus size={16} /> Add Expense
@@ -122,12 +161,28 @@ export default function ExpensesPage() {
                 <Label>Notes</Label>
                 <Input placeholder="Optional note" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
-              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
+              <div className="space-y-1.5">
+                <Label>Receipt</Label>
+                {form.receipt_url ? (
+                  <div className="flex items-center gap-2">
+                    <a href={form.receipt_url} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-600 underline truncate flex-1">View receipt</a>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, receipt_url: "" }))} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 cursor-pointer border border-dashed border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:border-violet-400 transition-colors">
+                    <Paperclip size={14} />
+                    {uploadingReceipt ? "Uploading..." : "Attach receipt (image/PDF)"}
+                    <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploadingReceipt} onChange={e => { const f = e.target.files?.[0]; if (f) uploadReceipt(f); }} />
+                  </label>
+                )}
+              </div>
+              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving || uploadingReceipt}>
                 {saving ? "Saving..." : editing ? "Save Changes" : "Add Expense"}
               </Button>
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -147,6 +202,31 @@ export default function ExpensesPage() {
           </Card>
         ))}
       </div>
+
+      {/* Category breakdown chart */}
+      {Object.keys(byCategory).length > 1 && (
+        <div className="mb-6 bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-xl p-4">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Spending by Category</p>
+          <div className="space-y-2.5">
+            {Object.entries(byCategory)
+              .sort((a, b) => b[1] - a[1])
+              .map(([cat, amt]) => (
+                <div key={cat}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600 dark:text-gray-400 font-medium">{cat}</span>
+                    <span className="text-gray-900 dark:text-white font-semibold">₹{amt.toLocaleString("en-IN")} <span className="text-gray-400 font-normal">({Math.round((amt / total) * 100)}%)</span></span>
+                  </div>
+                  <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-violet-500 transition-all"
+                      style={{ width: `${(amt / total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {!isPro && expenses.length > 0 && <AdBanner format="horizontal" className="mb-6" />}
 
@@ -177,6 +257,11 @@ export default function ExpensesPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-semibold text-red-500">−₹{e.amount.toLocaleString("en-IN")}</span>
+                    {e.receipt_url && (
+                      <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" title="View receipt" className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400">
+                        <Paperclip size={14} />
+                      </a>
+                    )}
                     <button onClick={() => openEdit(e)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400"><Pencil size={14} /></button>
                     <button onClick={() => deleteExpense(e.id)} className="text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
                   </div>

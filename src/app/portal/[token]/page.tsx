@@ -6,17 +6,23 @@ import Image from "next/image";
 const statusColors: Record<string, string> = {
   paid: "bg-green-100 text-green-700",
   unpaid: "bg-orange-100 text-orange-700",
+  partial: "bg-blue-100 text-blue-700",
 };
 
 export default async function ClientPortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/portal?token=${token}`, { cache: "no-store" });
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const res = await fetch(`${appUrl}/api/portal?token=${token}`, { cache: "no-store" });
   if (!res.ok) notFound();
 
-  const { client, invoices } = await res.json();
+  const { client, invoices, proposals } = await res.json();
 
-  const totalDue = invoices?.filter((i: { status: string }) => i.status === "unpaid")
-    .reduce((s: number, i: { total: number }) => s + i.total, 0) ?? 0;
+  const totalDue = invoices?.reduce((s: number, i: { status: string; total: number; amount_paid?: number | null }) => {
+    if (i.status === "unpaid") return s + i.total;
+    if (i.status === "partial") return s + i.total - (i.amount_paid ?? 0);
+    return s;
+  }, 0) ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -49,7 +55,10 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
           <div className="space-y-3">
             {invoices.map((inv: {
               invoice_number: string; invoice_date: string; due_date: string | null;
-              total: number; status: string; payment_method: string | null; upi_id: string | null; notes: string | null;
+              total: number; status: string; payment_method: string | null; payment_methods: string[] | null;
+              upi_id: string | null; bank_account_name: string | null; bank_account_number: string | null;
+              bank_ifsc: string | null; bank_name: string | null; payment_link: string | null;
+              amount_paid: number | null; notes: string | null;
             }) => (
               <Card key={inv.invoice_number}>
                 <CardContent className="p-5">
@@ -67,10 +76,40 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                     </div>
                   </div>
 
-                  {inv.status === "unpaid" && inv.payment_method && (
-                    <div className="bg-violet-50 rounded-lg p-3 text-sm space-y-1">
-                      <p className="font-medium text-violet-700">Pay via {inv.payment_method}</p>
-                      {inv.upi_id && <p className="text-violet-600">UPI ID: <strong>{inv.upi_id}</strong></p>}
+                  {inv.status !== "paid" && (
+                    <div className="space-y-2 mt-2">
+                      {inv.payment_link && (
+                        <a
+                          href={inv.payment_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 w-full bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                        >
+                          Pay Online ↗
+                        </a>
+                      )}
+                      {(() => {
+                        const methods = inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [];
+                        if (!methods.length && !inv.upi_id && !inv.bank_account_number) return null;
+                        return (
+                          <div className="bg-violet-50 rounded-lg p-3 text-sm space-y-1">
+                            {methods.length > 0 && <p className="font-medium text-violet-700">Pay via {methods.join(", ")}</p>}
+                            {inv.upi_id && <p className="text-violet-600">UPI ID: <strong>{inv.upi_id}</strong></p>}
+                            {inv.bank_account_number && (
+                              <>
+                                <p className="text-violet-600">Account: <strong>{inv.bank_account_name}</strong></p>
+                                <p className="text-violet-600">Acc No: <strong>{inv.bank_account_number}</strong></p>
+                                <p className="text-violet-600">IFSC: <strong>{inv.bank_ifsc}</strong> · Bank: <strong>{inv.bank_name}</strong></p>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {(inv.amount_paid ?? 0) > 0 && (
+                        <p className="text-xs text-green-600 font-medium">
+                          ₹{(inv.amount_paid ?? 0).toLocaleString("en-IN")} paid · Balance: ₹{(inv.total - (inv.amount_paid ?? 0)).toLocaleString("en-IN")} due
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -78,6 +117,33 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                 </CardContent>
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Proposals */}
+        {proposals?.length > 0 && (
+          <div className="mt-10">
+            <h2 className="font-semibold text-gray-700 mb-3">Your Proposals</h2>
+            <div className="space-y-3">
+              {proposals.map((p: { id: string; title: string; status: string; created_at: string; project_type?: string }) => (
+                <Card key={p.id}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{p.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {p.project_type && `${p.project_type} · `}
+                        {new Date(p.created_at).toLocaleDateString("en-IN")}
+                      </p>
+                    </div>
+                    <Badge className={
+                      p.status === "accepted" ? "bg-green-100 text-green-700" :
+                      p.status === "sent" ? "bg-blue-100 text-blue-700" :
+                      "bg-gray-100 text-gray-600"
+                    }>{p.status}</Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
         )}
 

@@ -58,11 +58,39 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Already decided" }, { status: 409 });
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("proposals")
     .update({ status: action })
-    .eq("review_token", token);
+    .eq("review_token", token)
+    .select("user_id, title")
+    .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify the freelancer
+  if (updated) {
+    try {
+      const admin = createAdminClient();
+      const { data: profile } = await admin.from("profiles")
+        .select("smtp_email, smtp_password")
+        .eq("id", updated.user_id)
+        .single();
+      if (profile?.smtp_email && profile?.smtp_password) {
+        const nodemailer = await import("nodemailer");
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: profile.smtp_email, pass: profile.smtp_password },
+        });
+        const emoji = action === "accepted" ? "✅" : "❌";
+        await transporter.sendMail({
+          from: profile.smtp_email,
+          to: profile.smtp_email,
+          subject: `${emoji} Proposal ${action}: ${updated.title}`,
+          html: `<p>Your proposal <strong>${updated.title}</strong> has been <strong>${action}</strong> by the client.</p>`,
+        });
+      }
+    } catch { /* don't block response if email fails */ }
+  }
+
   return NextResponse.json({ ok: true });
 }

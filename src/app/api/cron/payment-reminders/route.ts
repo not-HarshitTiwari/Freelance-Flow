@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
@@ -10,18 +10,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
-  // Find all unpaid invoices where due_date has passed
+  // Find all unpaid and partial invoices where due_date has passed
   const today = new Date().toISOString().slice(0, 10);
   const { data: overdueInvoices } = await supabase
     .from("invoices")
-    .select("id, invoice_number, customer_name, customer_email, total, due_date, user_id, reminder_sent_at")
-    .eq("status", "unpaid")
+    .select("id, invoice_number, customer_name, customer_email, total, amount_paid, due_date, user_id, reminder_sent_at, payment_link")
+    .in("status", ["unpaid", "partial", "overdue"])
     .lt("due_date", today)
     .not("customer_email", "is", null);
 
   if (!overdueInvoices?.length) return NextResponse.json({ sent: 0 });
+
+  // Mark all overdue unpaid invoices as "overdue" in the DB
+  const unpaidIds = overdueInvoices.filter(i => i.status === "unpaid").map(i => i.id);
+  if (unpaidIds.length > 0) {
+    await supabase.from("invoices").update({ status: "overdue" }).in("id", unpaidIds);
+  }
 
   let sent = 0;
 
@@ -32,6 +38,9 @@ export async function GET(req: Request) {
       const daysSince = (Date.now() - lastSent.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSince < 3) continue;
     }
+
+    const remaining = inv.total - (inv.amount_paid ?? 0);
+    if (remaining <= 0) continue; // fully paid partial, skip
 
     // Get user's SMTP settings
     const { data: profile } = await supabase
@@ -63,6 +72,8 @@ export async function GET(req: Request) {
             <strong>₹${inv.total.toLocaleString("en-IN")}</strong> was due on
             <strong>${new Date(inv.due_date).toLocaleDateString("en-IN")}</strong>
             (${overdueDays} day${overdueDays !== 1 ? "s" : ""} ago).</p>
+            ${(inv.amount_paid ?? 0) > 0 ? `<p>You have paid <strong>₹${inv.amount_paid!.toLocaleString("en-IN")}</strong>. The outstanding balance is <strong>₹${remaining.toLocaleString("en-IN")}</strong>.</p>` : ""}
+            ${inv.payment_link ? `<a href="${inv.payment_link}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;margin:8px 0 16px">Pay Now ↗</a>` : ""}
             <p>Please arrange payment at your earliest convenience.</p>
             <hr style="border:none;border-top:1px solid #eee;margin:20px 0;" />
             <p style="color:#666;font-size:13px;">Sent by ${senderName} via FreelanceFlow</p>

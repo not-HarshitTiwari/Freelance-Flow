@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2 } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
@@ -34,7 +34,7 @@ export default function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState(emptyForm);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchClients = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -55,8 +55,18 @@ export default function ClientsPage() {
     setEditOpen(true);
   }
 
-  async function deleteClient(id: string) {
-    if (!confirm("Delete this client? This cannot be undone.")) return;
+  async function deleteClient(id: string, name: string, email: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { count } = await supabase
+      .from("invoices")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .or(`customer_name.eq.${name},customer_email.eq.${email}`);
+    const msg = count && count > 0
+      ? `This client has ${count} invoice(s) linked. Deleting the client won't delete those invoices. Continue?`
+      : "Delete this client? This cannot be undone.";
+    if (!confirm(msg)) return;
     const { error } = await supabase.from("clients").delete().eq("id", id);
     if (error) toast.error("Failed to delete client");
     else { toast.success("Client deleted"); fetchClients(); }
@@ -213,6 +223,20 @@ export default function ClientsPage() {
                     >
                       <Link2 size={14} />
                     </button>
+                    {c.email && (
+                      <button
+                        onClick={async () => {
+                          const res = await fetch("/api/portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: c.id, sendEmail: true }) });
+                          const data = await res.json();
+                          if (data.token) toast.success(`Portal link emailed to ${c.email}!`);
+                          else toast.error("Failed — check your Gmail SMTP in Settings");
+                        }}
+                        className="text-gray-300 dark:text-gray-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
+                        title="Email portal link to client"
+                      >
+                        <Send size={14} />
+                      </button>
+                    )}
                     <button
                       onClick={() => openEdit(c)}
                       className="text-gray-300 dark:text-gray-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
@@ -221,7 +245,7 @@ export default function ClientsPage() {
                       <Pencil size={14} />
                     </button>
                     <button
-                      onClick={() => deleteClient(c.id)}
+                      onClick={() => deleteClient(c.id, c.name, c.email)}
                       className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                       title="Delete client"
                     >

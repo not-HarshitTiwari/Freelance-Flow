@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { generateInvoiceNumber } from "@/lib/invoice-number";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const igst = gst_type === "igst" ? totalGst : 0;
   const total = subtotal + totalGst;
 
-  const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+  const invoiceNumber = await generateInvoiceNumber(supabase, user.id);
 
   const { data, error } = await supabase.from("invoices").insert({
     user_id: user.id,
@@ -79,7 +80,32 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, ...updates } = body;
+  const {
+    id,
+    invoice_date, due_date, items, subtotal, tax, cgst, sgst, igst, gst_type, gst_rate, total,
+    status, amount_paid, payment_methods, payment_method, transaction_id,
+    upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
+    notes, terms,
+    seller_name, seller_address, seller_email, seller_phone, seller_gstin,
+    customer_name, customer_email, customer_company, customer_address, customer_gstin,
+    is_recurring, recurrence_interval, next_invoice_date,
+    payment_link, payment_link_id, reminder_sent_at,
+  } = body;
+
+  const updates: Record<string, unknown> = {};
+  const allowed = {
+    invoice_date, due_date, items, subtotal, tax, cgst, sgst, igst, gst_type, gst_rate, total,
+    status, amount_paid, payment_methods, payment_method, transaction_id,
+    upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
+    notes, terms,
+    seller_name, seller_address, seller_email, seller_phone, seller_gstin,
+    customer_name, customer_email, customer_company, customer_address, customer_gstin,
+    is_recurring, recurrence_interval, next_invoice_date,
+    payment_link, payment_link_id, reminder_sent_at,
+  };
+  for (const [k, v] of Object.entries(allowed)) {
+    if (v !== undefined) updates[k] = v;
+  }
 
   const { data, error } = await supabase
     .from("invoices")
