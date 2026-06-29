@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil } from "lucide-react";
+import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan } from "@/lib/plan-context";
@@ -90,7 +90,27 @@ function hexToRgb(hex: string): RGB {
   return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
 }
 
-async function downloadInvoicePdf(inv: Invoice, accentHex: string | null) {
+// Currency helpers
+const CURRENCIES: Record<string, { symbol: string; label: string }> = {
+  INR: { symbol: "₹", label: "INR — Indian Rupee" },
+  USD: { symbol: "$", label: "USD — US Dollar" },
+  EUR: { symbol: "€", label: "EUR — Euro" },
+  GBP: { symbol: "£", label: "GBP — British Pound" },
+  AED: { symbol: "AED", label: "AED — UAE Dirham" },
+  SGD: { symbol: "S$", label: "SGD — Singapore Dollar" },
+};
+function currSym(currency: string) { return CURRENCIES[currency]?.symbol ?? currency; }
+
+// PDF templates
+type PdfTemplate = "classic" | "minimal" | "bold";
+const PDF_TEMPLATES: { id: PdfTemplate; label: string }[] = [
+  { id: "classic", label: "Classic" },
+  { id: "minimal", label: "Minimal" },
+  { id: "bold",    label: "Bold" },
+];
+
+async function downloadInvoicePdf(inv: Invoice, accentHex: string | null, template: PdfTemplate = "classic", currency = "INR") {
+  const sym = currSym(currency);
   const { default: jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
 
@@ -98,57 +118,79 @@ async function downloadInvoicePdf(inv: Invoice, accentHex: string | null) {
   const accent: RGB | null = accentHex ? hexToRgb(accentHex) : null;
   const gray: RGB = [100, 100, 100];
   const black: RGB = [30, 30, 30];
-  const transparent = !accent;
+  const white: RGB = [255, 255, 255];
 
-  if (accent) {
-    doc.setFillColor(...accent);
-    doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255, 255, 255);
+  // ── HEADER by template ──────────────────────────────────────
+  if (template === "bold") {
+    // Full-width dark sidebar + big number on right
+    const col = accent ?? ([30, 30, 30] as RGB);
+    doc.setFillColor(...col); doc.rect(0, 0, 210, 42, "F");
+    doc.setTextColor(...white); doc.setFont("helvetica", "bold"); doc.setFontSize(26);
+    doc.text("INVOICE", 14, 26);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`#${inv.invoice_number}`, 14, 35);
+    doc.text(`Date: ${inv.invoice_date || ""}`, 140, 18);
+    if (inv.due_date) doc.text(`Due: ${inv.due_date}`, 140, 25);
+    doc.text(`Status: ${inv.status.toUpperCase()}`, 140, 32);
+    doc.text(`Currency: ${currency}`, 140, 39);
+  } else if (template === "minimal") {
+    // No color, just text with bottom border
+    doc.setTextColor(...black); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
+    doc.text("INVOICE", 14, 20);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(...gray);
+    doc.text(`#${inv.invoice_number}`, 14, 27);
+    doc.text(`${inv.invoice_date || ""}`, 140, 16);
+    if (inv.due_date) doc.text(`Due: ${inv.due_date}`, 140, 22);
+    doc.text(inv.status.toUpperCase(), 140, 28);
+    doc.setDrawColor(220, 220, 220); doc.line(14, 32, 196, 32);
   } else {
-    doc.setDrawColor(220, 220, 220);
-    doc.rect(0, 0, 210, 28, "S");
-    doc.setTextColor(...black);
+    // Classic — accent header band
+    if (accent) { doc.setFillColor(...accent); doc.rect(0, 0, 210, 28, "F"); doc.setTextColor(...white); }
+    else { doc.setDrawColor(220, 220, 220); doc.rect(0, 0, 210, 28, "S"); doc.setTextColor(...black); }
+    doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.text("INVOICE", 14, 18);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`#${inv.invoice_number}`, 14, 24);
+    doc.setFontSize(9);
+    doc.text(`Date: ${inv.invoice_date || ""}`, 140, 14);
+    if (inv.due_date) doc.text(`Due: ${inv.due_date}`, 140, 20);
+    doc.text(`Status: ${inv.status.toUpperCase()}`, 140, 26);
   }
-  doc.setFontSize(20); doc.setFont("helvetica", "bold");
-  doc.text("INVOICE", 14, 18);
-  doc.setFontSize(10); doc.setFont("helvetica", "normal");
-  doc.text(`#${inv.invoice_number}`, 14, 24);
-  doc.setFontSize(9);
-  if (!transparent) doc.setTextColor(255, 255, 255); else doc.setTextColor(...black);
-  doc.text(`Date: ${inv.invoice_date || ""}`, 140, 14);
-  if (inv.due_date) doc.text(`Due: ${inv.due_date}`, 140, 20);
-  doc.text(`Status: ${inv.status.toUpperCase()}`, 140, 26);
 
+  const bodyStart = template === "bold" ? 52 : template === "minimal" ? 40 : 40;
+
+  // ── FROM / TO ────────────────────────────────────────────────
   doc.setTextColor(...black); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-  doc.text("FROM", 14, 40);
+  doc.text("FROM", 14, bodyStart);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...gray);
   const seller = [inv.seller_name, inv.seller_address, inv.seller_email, inv.seller_phone, inv.seller_gstin ? `GSTIN: ${inv.seller_gstin}` : null].filter(Boolean) as string[];
-  seller.forEach((line, i) => doc.text(line, 14, 47 + i * 5));
+  seller.forEach((line, i) => doc.text(line, 14, bodyStart + 7 + i * 5));
 
   doc.setTextColor(...black); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("TO", 110, 40);
+  doc.text("TO", 110, bodyStart);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...gray);
   const customer = [inv.customer_name, inv.customer_company, inv.customer_address, inv.customer_gstin ? `GSTIN: ${inv.customer_gstin}` : null].filter(Boolean) as string[];
-  customer.forEach((line, i) => doc.text(line, 110, 47 + i * 5));
+  customer.forEach((line, i) => doc.text(line, 110, bodyStart + 7 + i * 5));
 
-  const tableStartY = 40 + Math.max(seller.length, customer.length) * 5 + 14;
+  // ── ITEMS TABLE ──────────────────────────────────────────────
+  const tableStartY = bodyStart + Math.max(seller.length, customer.length) * 5 + 14;
   autoTable(doc, {
     startY: tableStartY,
-    head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
+    head: [["#", "Description", "Qty", `Rate (${sym})`, `Amount (${sym})`]],
     body: inv.items.map((item, i) => [i + 1, item.description, item.quantity, item.rate.toLocaleString("en-IN"), (item.quantity * item.rate).toLocaleString("en-IN")]),
-    headStyles: { fillColor: accent ?? [240, 240, 240], textColor: accent ? [255, 255, 255] : black, fontSize: 9 },
+    headStyles: { fillColor: accent ?? (template === "bold" ? [30,30,30] : [240,240,240]), textColor: (accent || template === "bold") ? white : black, fontSize: 9 },
     bodyStyles: { fontSize: 9 },
+    alternateRowStyles: template === "minimal" ? { fillColor: [250,250,250] } : {},
     columnStyles: { 0: { cellWidth: 10 }, 2: { cellWidth: 15 }, 3: { cellWidth: 28 }, 4: { cellWidth: 30 } },
   });
 
+  // ── TOTALS ───────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalY = (doc as any).lastAutoTable.finalY + 8;
   const summaryX = 120;
   const rows = [
-    ["Subtotal", `₹${inv.subtotal.toLocaleString("en-IN")}`],
+    ["Subtotal", `${sym}${inv.subtotal.toLocaleString("en-IN")}`],
     ...(inv.gst_type === "cgst_sgst"
-      ? [[`CGST (${(inv.gst_rate||0)/2}%)`, `₹${(inv.cgst||0).toLocaleString("en-IN")}`], [`SGST (${(inv.gst_rate||0)/2}%)`, `₹${(inv.sgst||0).toLocaleString("en-IN")}`]]
-      : [[`IGST (${inv.gst_rate||0}%)`, `₹${(inv.igst||0).toLocaleString("en-IN")}`]]),
+      ? [[`CGST (${(inv.gst_rate||0)/2}%)`, `${sym}${(inv.cgst||0).toLocaleString("en-IN")}`], [`SGST (${(inv.gst_rate||0)/2}%)`, `${sym}${(inv.sgst||0).toLocaleString("en-IN")}`]]
+      : [[`IGST (${inv.gst_rate||0}%)`, `${sym}${(inv.igst||0).toLocaleString("en-IN")}`]]),
   ];
   rows.forEach(([label, value], i) => {
     doc.setFontSize(9); doc.setTextColor(...gray); doc.setFont("helvetica", "normal");
@@ -157,11 +199,12 @@ async function downloadInvoicePdf(inv: Invoice, accentHex: string | null) {
   });
 
   const totalY = finalY + rows.length * 6 + 2;
-  if (accent) { doc.setFillColor(...accent); doc.rect(summaryX - 2, totalY - 4, 80, 10, "F"); doc.setTextColor(255, 255, 255); }
+  const totalBg = accent ?? (template === "bold" ? ([30,30,30] as RGB) : null);
+  if (totalBg) { doc.setFillColor(...totalBg); doc.rect(summaryX - 2, totalY - 4, 80, 10, "F"); doc.setTextColor(...white); }
   else { doc.setDrawColor(200, 200, 200); doc.rect(summaryX - 2, totalY - 4, 80, 10, "S"); doc.setTextColor(...black); }
   doc.setFont("helvetica", "bold"); doc.setFontSize(10);
   doc.text("GRAND TOTAL", summaryX, totalY + 3);
-  doc.text(`₹${inv.total.toLocaleString("en-IN")}`, 195, totalY + 3, { align: "right" });
+  doc.text(`${sym}${inv.total.toLocaleString("en-IN")}`, 195, totalY + 3, { align: "right" });
 
   let infoY = totalY + 16;
   const methods = inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [];
@@ -219,6 +262,8 @@ export default function InvoicesPage() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [pdfColor, setPdfColor] = useState<string | null>("#7c3aed");
+  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
+  const [currency, setCurrency] = useState("INR");
   const [items, setItems] = useState<InvoiceItem[]>([{ description: "", quantity: 1, rate: 0 }]);
   const [form, setForm] = useState(emptyForm);
   const [editTarget, setEditTarget] = useState<Invoice | null>(null);
@@ -645,7 +690,14 @@ export default function InvoicesPage() {
                   <Badge className={statusColors[inv.status] || ""}>{inv.status}</Badge>
                   <button onClick={() => openEdit(inv)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Edit invoice"><Pencil size={15} /></button>
                   <button onClick={() => { setSendTarget(inv); setSendEmail(inv.customer_email || ""); setSendName(inv.customer_name || ""); setSendMessage(""); }} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Send invoice by email"><Send size={16} /></button>
-                  <button onClick={() => downloadInvoicePdf(inv, pdfColor)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
+                  <button
+                    onClick={() => {
+                      const msg = encodeURIComponent(`Hi ${inv.customer_name || "there"}, please find your invoice ${inv.invoice_number} for ₹${inv.total.toLocaleString("en-IN")}${inv.due_date ? `, due on ${new Date(inv.due_date).toLocaleDateString("en-IN")}` : ""}. Please arrange payment. Thank you!`);
+                      window.open(`https://wa.me/?text=${msg}`, "_blank");
+                    }}
+                    className="text-gray-400 hover:text-green-500" title="Send via WhatsApp"
+                  ><MessageCircle size={16} /></button>
+                  <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
                   {inv.status === "unpaid" && <button onClick={() => markPaid(inv.id)} className="text-gray-400 hover:text-green-600" title="Mark as paid"><CheckCircle size={16} /></button>}
                   <button onClick={() => deleteInvoice(inv.id)} className="text-gray-400 hover:text-red-600" title="Delete invoice"><Trash2 size={16} /></button>
                 </div>
@@ -734,22 +786,44 @@ export default function InvoicesPage() {
               {selected.terms && <div><p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase mb-1">Terms</p><p className="text-gray-500 dark:text-gray-400">{selected.terms}</p></div>}
             </div>
 
-            <div className="mt-4 border-t dark:border-gray-700 pt-4">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">PDF Accent Color</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
-                  <button key={c} onClick={() => setPdfColor(c)} className="w-7 h-7 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
-                ))}
-                <label className="relative w-7 h-7 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
-                  <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" value={pdfColor ?? "#ffffff"} onChange={e => setPdfColor(e.target.value)} />
-                  <span className="flex items-center justify-center w-full h-full text-xs text-gray-400">+</span>
-                </label>
-                <button onClick={() => setPdfColor(null)} className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs text-gray-400 transition-all ${pdfColor === null ? "border-black" : "border-gray-300"}`} style={{ background: "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 6px)" }} />
+            <div className="mt-4 border-t dark:border-gray-700 pt-4 space-y-3">
+              {/* Template picker */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">PDF Template</p>
+                <div className="flex gap-2">
+                  {PDF_TEMPLATES.map(t => (
+                    <button key={t.id} onClick={() => setPdfTemplate(t.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Currency picker */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Currency</p>
+                <select value={currency} onChange={e => setCurrency(e.target.value)} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-sm outline-none">
+                  {Object.entries(CURRENCIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+              </div>
+              {/* Color picker */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Accent Color</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
+                    <button key={c} onClick={() => setPdfColor(c)} className="w-7 h-7 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
+                  ))}
+                  <label className="relative w-7 h-7 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
+                    <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" value={pdfColor ?? "#ffffff"} onChange={e => setPdfColor(e.target.value)} />
+                    <span className="flex items-center justify-center w-full h-full text-xs text-gray-400">+</span>
+                  </label>
+                  <button onClick={() => setPdfColor(null)} className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs text-gray-400 transition-all ${pdfColor === null ? "border-black" : "border-gray-300"}`} style={{ background: "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 6px)" }} />
+                </div>
               </div>
             </div>
 
             <div className="flex gap-2 mt-3">
-              <Button onClick={() => downloadInvoicePdf(selected, pdfColor)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
+              <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
                 <Download size={16} /> Download PDF
               </Button>
               <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">

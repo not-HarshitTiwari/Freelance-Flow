@@ -25,7 +25,11 @@ CREATE POLICY "Users manage own portals" ON public.client_portals USING (auth.ui
 -- Allow public read by token (for portal page)
 CREATE POLICY "Public read portal by token" ON public.client_portals FOR SELECT USING (true);
 
--- 3. Recurring invoice fields
+-- 3. Proposal review token
+ALTER TABLE public.proposals
+  ADD COLUMN IF NOT EXISTS review_token text UNIQUE;
+
+-- 4. Recurring invoice fields
 ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS is_recurring boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS recurrence_interval text DEFAULT 'monthly', -- weekly / monthly / quarterly

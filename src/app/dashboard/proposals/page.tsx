@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check } from "lucide-react";
+import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2 } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan } from "@/lib/plan-context";
@@ -398,6 +398,18 @@ export default function ProposalsPage() {
                       title="Send via email"
                     >
                       <Send size={15} />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const res = await fetch("/api/proposals/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposalId: p.id }) });
+                        const data = await res.json();
+                        if (data.token) { await navigator.clipboard.writeText(`${window.location.origin}/review/${data.token}`); toast.success("Review link copied!"); }
+                        else toast.error("Failed to generate link");
+                      }}
+                      className="text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+                      title="Copy client review link"
+                    >
+                      <Link2 size={15} />
                     </button>
                     <button
                       onClick={() => deleteProposal(p.id)}
