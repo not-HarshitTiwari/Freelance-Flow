@@ -711,9 +711,11 @@ export default function InvoicesPage() {
       {/* View Invoice Dialog */}
       {selected && (
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{selected.invoice_number}</DialogTitle></DialogHeader>
-            <div className="text-sm space-y-4">
+          <DialogContent className="max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden">
+            <div className="px-6 pt-6 pb-2 border-b dark:border-gray-700 shrink-0">
+              <DialogHeader><DialogTitle>{selected.invoice_number}</DialogTitle></DialogHeader>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4 text-sm space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-400 dark:text-gray-500 uppercase font-semibold mb-1">From</p>
@@ -786,49 +788,53 @@ export default function InvoicesPage() {
               {selected.terms && <div><p className="font-semibold text-xs text-gray-600 dark:text-gray-400 uppercase mb-1">Terms</p><p className="text-gray-500 dark:text-gray-400">{selected.terms}</p></div>}
             </div>
 
-            <div className="mt-4 border-t dark:border-gray-700 pt-4 space-y-3">
-              {/* Template picker */}
-              <div>
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">PDF Template</p>
-                <div className="flex gap-2">
-                  {PDF_TEMPLATES.map(t => (
-                    <button key={t.id} onClick={() => setPdfTemplate(t.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
-                      {t.label}
-                    </button>
-                  ))}
+            </div>
+
+            {/* Sticky footer — always visible */}
+            <div className="shrink-0 border-t dark:border-gray-700 px-6 pt-3 pb-4 bg-white dark:bg-gray-950 space-y-3">
+              {/* Template + Currency row */}
+              <div className="flex items-end gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Template</p>
+                  <div className="flex gap-1.5">
+                    {PDF_TEMPLATES.map(t => (
+                      <button key={t.id} onClick={() => setPdfTemplate(t.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${pdfTemplate === t.id ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"}`}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              {/* Currency picker */}
-              <div>
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Currency</p>
-                <select value={currency} onChange={e => setCurrency(e.target.value)} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-sm outline-none">
-                  {Object.entries(CURRENCIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Currency</p>
+                  <select value={currency} onChange={e => setCurrency(e.target.value)} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-sm outline-none">
+                    {Object.entries(CURRENCIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                </div>
               </div>
               {/* Color picker */}
               <div>
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-2">Accent Color</p>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Accent Color</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
-                    <button key={c} onClick={() => setPdfColor(c)} className="w-7 h-7 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
+                    <button key={c} onClick={() => setPdfColor(c)} className="w-6 h-6 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
                   ))}
-                  <label className="relative w-7 h-7 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
+                  <label className="relative w-6 h-6 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
                     <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" value={pdfColor ?? "#ffffff"} onChange={e => setPdfColor(e.target.value)} />
                     <span className="flex items-center justify-center w-full h-full text-xs text-gray-400">+</span>
                   </label>
-                  <button onClick={() => setPdfColor(null)} className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs text-gray-400 transition-all ${pdfColor === null ? "border-black" : "border-gray-300"}`} style={{ background: "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 6px)" }} />
+                  <button onClick={() => setPdfColor(null)} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs text-gray-400 transition-all ${pdfColor === null ? "border-black" : "border-gray-300"}`} style={{ background: "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 6px)" }} />
                 </div>
               </div>
-            </div>
-
-            <div className="flex gap-2 mt-3">
-              <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
-                <Download size={16} /> Download PDF
-              </Button>
-              <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
-                <Send size={16} /> Send Email
-              </Button>
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
+                  <Download size={16} /> Download PDF
+                </Button>
+                <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
+                  <Send size={16} /> Send Email
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
