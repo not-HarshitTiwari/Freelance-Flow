@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdBanner } from "@/components/ads/AdBanner";
-import { usePlan } from "@/lib/plan-context";
-import { Download, FileText, IndianRupee } from "lucide-react";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { Download, FileText, IndianRupee, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 type Invoice = {
@@ -13,6 +13,13 @@ type Invoice = {
   subtotal: number; gst_rate: number; tax: number | null; cgst: number | null; sgst: number | null;
   igst: number | null; total: number; gst_type: string; status: string;
 };
+
+type Expense = { title: string; amount: number; category: string; date: string };
+
+function csvEscape(v: string | number) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const currentYear = new Date().getFullYear();
@@ -24,8 +31,11 @@ const QUARTERS = [
 ];
 
 export default function TaxReportPage() {
-  const isPro = usePlan() === "pro";
+  const plan = usePlan();
+  const isPro = plan === "pro";
+  const canExportAccounting = planAtLeast(plan, "basic");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [year, setYear] = useState(currentYear);
   const [quarter, setQuarter] = useState(0);
 
@@ -33,6 +43,9 @@ export default function TaxReportPage() {
     fetch("/api/invoices")
       .then(r => r.json())
       .then(d => setInvoices(d.invoices || []));
+    fetch("/api/expenses")
+      .then(r => r.json())
+      .then(d => setExpenses(d.expenses || []));
   }, []);
 
   const qMonths = QUARTERS[quarter].months;
@@ -41,6 +54,10 @@ export default function TaxReportPage() {
     return d.getFullYear() === year && qMonths.includes(d.getMonth());
   });
   const paid = filtered.filter(i => i.status === "paid");
+  const filteredExpenses = expenses.filter(e => {
+    const d = new Date(e.date);
+    return d.getFullYear() === year && qMonths.includes(d.getMonth());
+  });
 
   const totals = {
     subtotal: paid.reduce((s, i) => s + i.subtotal, 0),
@@ -82,6 +99,36 @@ export default function TaxReportPage() {
     toast.success("Report downloaded!");
   }
 
+  // Double-entry ledger CSV (Tally/Zoho Books/QuickBooks compatible voucher import)
+  function downloadAccountingCSV() {
+    const rows: (string | number)[][] = [
+      ["Date", "Voucher Type", "Voucher No", "Ledger Name", "Particulars", "Debit", "Credit", "Narration"],
+    ];
+
+    for (const inv of paid) {
+      const gstSplit = inv.gst_type === "igst" ? [["Output IGST", inv.igst ?? 0]] : [["Output CGST", inv.cgst ?? 0], ["Output SGST", inv.sgst ?? 0]];
+      rows.push([inv.invoice_date, "Sales", inv.invoice_number, inv.customer_name, "Sundry Debtors", inv.total, "", `Sales to ${inv.customer_name}`]);
+      rows.push([inv.invoice_date, "Sales", inv.invoice_number, "Sales Account", "Direct Income", "", inv.subtotal, ""]);
+      for (const [ledger, amt] of gstSplit) {
+        if ((amt as number) > 0) rows.push([inv.invoice_date, "Sales", inv.invoice_number, ledger as string, "Duties & Taxes", "", amt, ""]);
+      }
+    }
+
+    filteredExpenses.forEach((exp, i) => {
+      const voucherNo = `EXP-${i + 1}`;
+      rows.push([exp.date, "Purchase", voucherNo, exp.category, "Indirect Expenses", exp.amount, "", exp.title]);
+      rows.push([exp.date, "Purchase", voucherNo, "Cash/Bank", "Cash-in-hand", "", exp.amount, ""]);
+    });
+
+    const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `Accounting-Export-${QUARTERS[quarter].label.replace(/[^A-Za-z0-9]/g, "-")}-${year}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success("Accounting export downloaded!");
+  }
+
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
   return (
@@ -91,10 +138,22 @@ export default function TaxReportPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GST Tax Report</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Quarterly summary for GSTR filing</p>
         </div>
-        <Button onClick={downloadCSV} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
-          <Download size={16} /> Export CSV
-        </Button>
+        <div className="flex gap-2">
+          {canExportAccounting && (
+            <Button onClick={downloadAccountingCSV} variant="outline" className="gap-2" title="Double-entry ledger CSV compatible with Tally, Zoho Books & QuickBooks">
+              <FileSpreadsheet size={16} /> Export for Accounting Software
+            </Button>
+          )}
+          <Button onClick={downloadCSV} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
+            <Download size={16} /> Export CSV
+          </Button>
+        </div>
       </div>
+      {!canExportAccounting && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-4 mb-6">
+          Upgrade to Basic or above to export a Tally/Zoho Books/QuickBooks-compatible ledger CSV.
+        </p>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-6 flex-wrap">
