@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
+import { applyStockChange, type StockItem } from "@/lib/stock";
+
+const STOCK_WARNING = "Invoice saved, but some stock counts couldn't be updated automatically.";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -76,13 +79,9 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  for (const item of items as { product_id?: string; quantity: number }[]) {
-    if (item.product_id) {
-      await supabase.rpc("decrement_product_stock", { p_id: item.product_id, qty: item.quantity });
-    }
-  }
+  const stockErrors = await applyStockChange(supabase, items as StockItem[], 1);
 
-  return NextResponse.json({ invoice: data });
+  return NextResponse.json({ invoice: data, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }
 
 export async function GET() {
@@ -124,6 +123,12 @@ export async function PATCH(request: Request) {
     }
   }
 
+  let previousItems: StockItem[] | undefined;
+  if (items !== undefined) {
+    const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", user.id).single();
+    previousItems = existing?.items as StockItem[] | undefined;
+  }
+
   const updates: Record<string, unknown> = {};
   const allowed = {
     invoice_date, due_date, items, subtotal, tax, cgst, sgst, igst, gst_type, gst_rate, total,
@@ -148,7 +153,16 @@ export async function PATCH(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ invoice: data });
+
+  let stockErrors: { product_id: string; message: string }[] = [];
+  if (items !== undefined) {
+    stockErrors = [
+      ...await applyStockChange(supabase, previousItems, -1),
+      ...await applyStockChange(supabase, items as StockItem[], 1),
+    ];
+  }
+
+  return NextResponse.json({ invoice: data, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }
 
 export async function DELETE(request: Request) {
@@ -156,7 +170,13 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await request.json();
+
+  const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", user.id).single();
+
   const { error } = await supabase.from("invoices").delete().eq("id", id).eq("user_id", user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+
+  const stockErrors = await applyStockChange(supabase, existing?.items as StockItem[] | undefined, -1);
+
+  return NextResponse.json({ success: true, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }

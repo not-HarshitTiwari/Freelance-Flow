@@ -555,6 +555,20 @@ function InvoicesPageInner() {
     setItems(u);
   }
 
+  async function saveDescriptionAsProduct(description: string, rate: number, hsn_code: string | undefined, applyId: (id: string) => void) {
+    if (!description.trim()) return;
+    const res = await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: description.trim(), type: "service", unit_price: rate, hsn_code: hsn_code || "" }),
+    });
+    const data = await res.json();
+    if (data.error) { toast.error(data.error); return; }
+    setProducts(p => [...p, data.product].sort((a, b) => a.name.localeCompare(b.name)));
+    applyId(data.product.id);
+    toast.success("Saved to your catalog");
+  }
+
   const subtotal = items.reduce((s, i) => s + i.quantity * i.rate, 0);
   const gstAmt = (subtotal * parseFloat(form.gst_rate || "0")) / 100;
   const total = subtotal + gstAmt;
@@ -716,9 +730,11 @@ function InvoicesPageInner() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       toast.success(`Invoice ${data.invoice.invoice_number} created!`);
+      if (data.stock_warning) toast.warning(data.stock_warning);
       setOpen(false);
       setItems([{ description: "", quantity: 1, rate: 0 }]);
       fetchInvoices();
+      fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");
     } finally { setSaving(false); }
@@ -726,9 +742,12 @@ function InvoicesPageInner() {
 
   async function deleteInvoice(id: string) {
     if (!confirm("Delete this invoice? This cannot be undone.")) return;
-    await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const res = await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const data = await res.json();
     toast.success("Invoice deleted");
+    if (data.stock_warning) toast.warning(data.stock_warning);
     fetchInvoices();
+    fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
   }
 
   async function markPaid(inv: Invoice) {
@@ -806,8 +825,10 @@ function InvoicesPageInner() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       toast.success("Invoice updated!");
+      if (data.stock_warning) toast.warning(data.stock_warning);
       setEditTarget(null);
       fetchInvoices();
+      fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update");
     } finally { setEditSaving(false); }
@@ -956,6 +977,15 @@ function InvoicesPageInner() {
                         <div className="col-span-1 flex justify-end"><button type="button" onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></div>
                       </div>
                       {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                      {!item.product_id && item.description.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => saveDescriptionAsProduct(item.description, item.rate, item.hsn_code, id => setItems(its => its.map((it, idx) => idx === i ? { ...it, product_id: id } : it)))}
+                          className="text-xs text-violet-600 hover:underline mt-0.5"
+                        >
+                          + Save &quot;{item.description}&quot; to catalog
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1492,6 +1522,15 @@ function InvoicesPageInner() {
                           <div className="col-span-1 flex justify-end"><button type="button" onClick={() => setEditItems(editItems.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
                         </div>
                         {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                        {!item.product_id && item.description.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => saveDescriptionAsProduct(item.description, item.rate, item.hsn_code, id => setEditItems(its => its.map((it, idx) => idx === i ? { ...it, product_id: id } : it)))}
+                            className="text-xs text-violet-600 hover:underline mt-0.5"
+                          >
+                            + Save &quot;{item.description}&quot; to catalog
+                          </button>
+                        )}
                       </div>
                     );
                   })}

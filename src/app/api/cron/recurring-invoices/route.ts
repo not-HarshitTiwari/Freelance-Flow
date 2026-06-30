@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
+import { applyStockChange, type StockItem } from "@/lib/stock";
 
 // Vercel cron calls this every day at 8am IST
 export async function GET(req: Request) {
@@ -70,6 +71,8 @@ export async function GET(req: Request) {
     });
 
     if (!error) {
+      await applyStockChange(supabase, inv.items as StockItem[], 1);
+
       const next = new Date();
       const interval = inv.recurrence_interval || "monthly";
       if (interval === "weekly") next.setDate(next.getDate() + 7);
