@@ -75,6 +75,13 @@ export async function POST(request: Request) {
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  for (const item of items as { product_id?: string; quantity: number }[]) {
+    if (item.product_id) {
+      await supabase.rpc("decrement_product_stock", { p_id: item.product_id, qty: item.quantity });
+    }
+  }
+
   return NextResponse.json({ invoice: data });
 }
 

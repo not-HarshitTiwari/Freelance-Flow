@@ -15,7 +15,17 @@ import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { toast } from "sonner";
 
-type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string };
+type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string; product_id?: string };
+
+type Product = {
+  id: string;
+  name: string;
+  unit_price: number;
+  hsn_code: string | null;
+  type: "product" | "service";
+  track_inventory: boolean;
+  quantity: number | null;
+};
 
 type Invoice = {
   id: string;
@@ -353,10 +363,62 @@ const emptyForm = {
 
 const PAGE_SIZE = 20;
 
+function getStockWarning(item: InvoiceItem, products: Product[]): string | null {
+  if (!item.product_id) return null;
+  const p = products.find(pr => pr.id === item.product_id);
+  if (!p || !p.track_inventory) return null;
+  const available = p.quantity ?? 0;
+  if (item.quantity > available) return available <= 0 ? "Out of stock" : `Only ${available} in stock`;
+  return null;
+}
+
+function ProductPicker({ value, products, onChangeText, onSelect }: {
+  value: string;
+  products: Product[];
+  onChangeText: (text: string) => void;
+  onSelect: (p: Product) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const filtered = (value.trim()
+    ? products.filter(p => p.name.toLowerCase().includes(value.toLowerCase()))
+    : products
+  ).slice(0, 6);
+
+  return (
+    <div className="relative">
+      <Input
+        placeholder="Description"
+        value={value}
+        onChange={e => { onChangeText(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        required
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+          {filtered.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onSelect(p); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between gap-2"
+            >
+              <span className="truncate text-gray-900 dark:text-gray-100">{p.name}</span>
+              <span className="text-xs text-gray-400 shrink-0">₹{p.unit_price.toLocaleString("en-IN")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InvoicesPageInner() {
   const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(0);
@@ -428,6 +490,7 @@ function InvoicesPageInner() {
       });
     }
     fetchInvoices();
+    fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
     // Pre-fill from time-tracking conversion
     const prefillParam = searchParams.get("prefill");
     if (prefillParam) {
@@ -482,7 +545,14 @@ function InvoicesPageInner() {
   function addItem() { setItems([...items, { description: "", quantity: 1, rate: 0 }]); }
   function removeItem(i: number) { setItems(items.filter((_, idx) => idx !== i)); }
   function updateItem(i: number, field: keyof InvoiceItem, value: string | number) {
-    const u = [...items]; u[i] = { ...u[i], [field]: value }; setItems(u);
+    const u = [...items];
+    u[i] = { ...u[i], [field]: value, ...(field === "description" ? { product_id: undefined } : {}) };
+    setItems(u);
+  }
+  function pickProduct(i: number, p: Product) {
+    const u = [...items];
+    u[i] = { ...u[i], description: p.name, rate: p.unit_price, hsn_code: p.hsn_code || u[i].hsn_code, product_id: p.id };
+    setItems(u);
   }
 
   const subtotal = items.reduce((s, i) => s + i.quantity * i.rate, 0);
@@ -866,16 +936,29 @@ function InvoicesPageInner() {
               {/* Line Items */}
               <div className="space-y-2">
                 <p className={sectionTitle}>Line Items</p>
-                {items.map((item, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-4"><Input placeholder="Description" value={item.description} onChange={e => updateItem(i, "description", e.target.value)} required /></div>
-                    <div className="col-span-2"><Input placeholder="HSN/SAC" value={item.hsn_code || ""} onChange={e => updateItem(i, "hsn_code", e.target.value)} /></div>
-                    <div className="col-span-2"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={e => updateItem(i, "quantity", parseInt(e.target.value) || 1)} /></div>
-                    <div className="col-span-2"><Input type="number" placeholder="Rate ₹" min={0} value={item.rate} onChange={e => updateItem(i, "rate", parseFloat(e.target.value) || 0)} /></div>
-                    <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity * item.rate).toLocaleString("en-IN")}</div>
-                    <div className="col-span-1 flex justify-end"><button type="button" onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></div>
-                  </div>
-                ))}
+                {items.map((item, i) => {
+                  const stockWarning = getStockWarning(item, products);
+                  return (
+                    <div key={i}>
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-4">
+                          <ProductPicker
+                            value={item.description}
+                            products={products}
+                            onChangeText={v => updateItem(i, "description", v)}
+                            onSelect={p => pickProduct(i, p)}
+                          />
+                        </div>
+                        <div className="col-span-2"><Input placeholder="HSN/SAC" value={item.hsn_code || ""} onChange={e => updateItem(i, "hsn_code", e.target.value)} /></div>
+                        <div className="col-span-2"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={e => updateItem(i, "quantity", parseInt(e.target.value) || 1)} /></div>
+                        <div className="col-span-2"><Input type="number" placeholder="Rate ₹" min={0} value={item.rate} onChange={e => updateItem(i, "rate", parseFloat(e.target.value) || 0)} /></div>
+                        <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity * item.rate).toLocaleString("en-IN")}</div>
+                        <div className="col-span-1 flex justify-end"><button type="button" onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></div>
+                      </div>
+                      {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                    </div>
+                  );
+                })}
                 <button type="button" onClick={addItem} className="flex items-center gap-1 text-violet-600 text-sm hover:underline"><Plus size={14} /> Add Item</button>
               </div>
 
@@ -1390,15 +1473,28 @@ function InvoicesPageInner() {
 
                 <div className="space-y-2">
                   <p className={sectionTitle}>Line Items</p>
-                  {editItems.map((item, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-5"><Input value={item.description} onChange={e => { const u=[...editItems]; u[i]={...u[i],description:e.target.value}; setEditItems(u); }} /></div>
-                      <div className="col-span-2"><Input type="number" min={1} value={item.quantity} onChange={e => { const u=[...editItems]; u[i]={...u[i],quantity:parseInt(e.target.value)||1}; setEditItems(u); }} /></div>
-                      <div className="col-span-3"><Input type="number" min={0} value={item.rate} onChange={e => { const u=[...editItems]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditItems(u); }} /></div>
-                      <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity*item.rate).toLocaleString("en-IN")}</div>
-                      <div className="col-span-1 flex justify-end"><button type="button" onClick={() => setEditItems(editItems.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
-                    </div>
-                  ))}
+                  {editItems.map((item, i) => {
+                    const stockWarning = getStockWarning(item, products);
+                    return (
+                      <div key={i}>
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <div className="col-span-5">
+                            <ProductPicker
+                              value={item.description}
+                              products={products}
+                              onChangeText={v => { const u=[...editItems]; u[i]={...u[i],description:v,product_id:undefined}; setEditItems(u); }}
+                              onSelect={p => { const u=[...editItems]; u[i]={...u[i],description:p.name,rate:p.unit_price,hsn_code:p.hsn_code||u[i].hsn_code,product_id:p.id}; setEditItems(u); }}
+                            />
+                          </div>
+                          <div className="col-span-2"><Input type="number" min={1} value={item.quantity} onChange={e => { const u=[...editItems]; u[i]={...u[i],quantity:parseInt(e.target.value)||1}; setEditItems(u); }} /></div>
+                          <div className="col-span-3"><Input type="number" min={0} value={item.rate} onChange={e => { const u=[...editItems]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditItems(u); }} /></div>
+                          <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity*item.rate).toLocaleString("en-IN")}</div>
+                          <div className="col-span-1 flex justify-end"><button type="button" onClick={() => setEditItems(editItems.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
+                        </div>
+                        {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                      </div>
+                    );
+                  })}
                   <button type="button" onClick={() => setEditItems([...editItems,{description:"",quantity:1,rate:0}])} className="flex items-center gap-1 text-violet-600 text-sm hover:underline"><Plus size={14}/>Add Item</button>
                 </div>
 
