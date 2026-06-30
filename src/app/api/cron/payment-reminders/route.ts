@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   const today = new Date().toISOString().slice(0, 10);
   const { data: overdueInvoices } = await supabase
     .from("invoices")
-    .select("id, invoice_number, customer_name, customer_email, total, amount_paid, due_date, user_id, reminder_sent_at, payment_link")
+    .select("id, invoice_number, customer_name, customer_email, total, amount_paid, due_date, user_id, reminder_sent_at, payment_link, status")
     .in("status", ["unpaid", "partial", "overdue"])
     .lt("due_date", today)
     .not("customer_email", "is", null);
