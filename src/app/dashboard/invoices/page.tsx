@@ -597,15 +597,14 @@ function InvoicesPageInner() {
 
   async function bulkMarkPaid() {
     setBulkWorking(true);
-    await Promise.all([...bulkSelected].map(id => {
-      const inv = invoices.find(i => i.id === id);
-      return fetch("/api/invoices", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: "paid", amount_paid: inv?.total ?? null }),
-      });
-    }));
-    toast.success(`${bulkSelected.size} invoice(s) marked paid`);
+    const res = await fetch("/api/invoices/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...bulkSelected] }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || "Failed to mark invoices paid");
+    else toast.success(`${data.updated} invoice(s) marked paid`);
     setBulkSelected(new Set());
     fetchInvoices();
     setBulkWorking(false);
@@ -614,10 +613,14 @@ function InvoicesPageInner() {
   async function bulkDelete() {
     if (!confirm(`Delete ${bulkSelected.size} invoice(s)? This cannot be undone.`)) return;
     setBulkWorking(true);
-    await Promise.all([...bulkSelected].map(id =>
-      fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
-    ));
-    toast.success(`${bulkSelected.size} invoice(s) deleted`);
+    const res = await fetch("/api/invoices/bulk", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...bulkSelected] }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || "Failed to delete invoices");
+    else toast.success(`${data.deleted} invoice(s) deleted${data.stock_warning ? " — " + data.stock_warning : ""}`);
     setBulkSelected(new Set());
     fetchInvoices();
     setBulkWorking(false);
