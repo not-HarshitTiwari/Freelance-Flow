@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { usePlan } from "@/lib/plan-context";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send, Upload, Download } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { toast } from "sonner";
 
@@ -27,6 +27,7 @@ const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
 export default function ClientsPage() {
   const plan = usePlan();
   const isPro = plan !== "free";
+  const canBulkImport = planAtLeast(plan, "basic");
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,6 +35,8 @@ export default function ClientsPage() {
   const [editing, setEditing] = useState<Client | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState(emptyForm);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -111,6 +114,83 @@ export default function ClientsPage() {
     setSaving(false);
   }
 
+  function exportCSV() {
+    const rows = [["Name", "Email", "Phone", "Company", "Address"]];
+    for (const c of clients) rows.push([c.name, c.email, c.phone || "", c.company || "", c.address || ""]);
+    const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "clients.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCSV(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else if (c === '"') inQuotes = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field); field = "";
+        if (row.some(f => f.trim() !== "")) rows.push(row);
+        row = [];
+      } else field += c;
+    }
+    if (field !== "" || row.length) { row.push(field); if (row.some(f => f.trim() !== "")) rows.push(row); }
+    return rows;
+  }
+
+  async function importCSV(file: File) {
+    if (!canBulkImport) { toast.error("Bulk CSV import requires Basic plan or higher."); return; }
+    setImporting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (!rows.length) throw new Error("CSV file is empty");
+
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const dataRows = rows.slice(1);
+      const idx = (name: string) => header.indexOf(name);
+
+      const toInsert = dataRows
+        .map(r => ({
+          user_id: user.id,
+          name: r[idx("name")]?.trim() || "",
+          email: r[idx("email")]?.trim() || "",
+          phone: r[idx("phone")]?.trim() || null,
+          company: r[idx("company")]?.trim() || null,
+          address: r[idx("address")]?.trim() || null,
+        }))
+        .filter(c => c.name && c.email);
+
+      const failed = dataRows.length - toInsert.length;
+      if (!toInsert.length) throw new Error("No valid rows found (each needs Name and Email)");
+
+      const { error, count } = await supabase.from("clients").insert(toInsert, { count: "exact" });
+      if (error) throw new Error(error.message);
+
+      toast.success(`Imported ${count ?? toInsert.length} client${(count ?? toInsert.length) === 1 ? "" : "s"}${failed ? `, ${failed} skipped` : ""}`);
+      fetchClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   const ClientForm = ({ f, setF, onSubmit, submitLabel }: {
     f: typeof emptyForm;
     setF: (v: typeof emptyForm) => void;
@@ -154,17 +234,39 @@ export default function ClientsPage() {
             {plan === "free" && <span className="ml-2 text-orange-500 font-medium">{clients.length}/3 used</span>}
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
-            <Plus size={16} /> Add Client
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add New Client</DialogTitle>
-            </DialogHeader>
-            <ClientForm f={form} setF={setForm} onSubmit={handleAdd} submitLabel="Add Client" />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) importCSV(f); }}
+          />
+          <button
+            onClick={() => canBulkImport ? fileInputRef.current?.click() : toast.error("Bulk CSV import requires Basic plan or higher.")}
+            disabled={importing}
+            className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors disabled:opacity-50"
+            title={canBulkImport ? "Import clients from CSV" : "Requires Basic plan or higher"}
+          >
+            <Upload size={15} /> {importing ? "Importing..." : "Import CSV"} {!canBulkImport && <span className="text-orange-500 font-normal">(Basic+)</span>}
+          </button>
+          {clients.length > 0 && (
+            <button onClick={exportCSV} className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+              <Download size={15} /> Export CSV
+            </button>
+          )}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+              <Plus size={16} /> Add Client
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add New Client</DialogTitle>
+              </DialogHeader>
+              <ClientForm f={form} setF={setForm} onSubmit={handleAdd} submitLabel="Add Client" />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Edit Dialog */}
