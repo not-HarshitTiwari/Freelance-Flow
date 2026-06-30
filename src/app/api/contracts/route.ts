@@ -13,6 +13,12 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
+    return NextResponse.json({ error: "Contracts require a Basic plan or higher." }, { status: 403 });
+  }
+
   const { title, client_name, client_email, body } = await request.json();
   const { data, error } = await supabase.from("contracts")
     .insert({ title, client_name: client_name || null, client_email: client_email || null, body, user_id: user.id })
@@ -27,6 +33,13 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, title, client_name, client_email, body, status } = await request.json();
+
+  if (status === "sent") {
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
+      return NextResponse.json({ error: "Sending contracts requires a Basic plan or higher." }, { status: 403 });
+    }
+  }
 
   // Whitelist updatable fields — never allow sign_token, client_signature, signed_at, user_id
   const updates: Record<string, string | null> = {};

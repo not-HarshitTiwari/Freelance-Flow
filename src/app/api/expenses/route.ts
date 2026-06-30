@@ -24,9 +24,17 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { title, amount, category, date, notes, receipt_url } = body;
 
+  let allowedReceiptUrl = receipt_url || null;
+  if (allowedReceiptUrl) {
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
+      allowedReceiptUrl = null;
+    }
+  }
+
   const { data, error } = await supabase
     .from("expenses")
-    .insert({ user_id: user.id, title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: receipt_url || null })
+    .insert({ user_id: user.id, title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: allowedReceiptUrl })
     .select()
     .single();
 
@@ -40,9 +48,18 @@ export async function PATCH(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, title, amount, category, date, notes, receipt_url } = await req.json();
+
+  let allowedReceiptUrl = receipt_url;
+  if (receipt_url) {
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
+      allowedReceiptUrl = null;
+    }
+  }
+
   const { error } = await supabase
     .from("expenses")
-    .update({ title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: receipt_url ?? undefined })
+    .update({ title, amount: parseFloat(amount), category, date, notes: notes || null, receipt_url: allowedReceiptUrl ?? undefined })
     .eq("id", id)
     .eq("user_id", user.id);
 

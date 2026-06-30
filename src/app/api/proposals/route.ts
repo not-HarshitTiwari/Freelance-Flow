@@ -11,9 +11,33 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("plan, full_name, business_name, business_address, email, phone, gstin")
+    .select("plan, full_name, business_name, business_address, email, phone, gstin, ai_proposals_count, ai_proposals_reset_at")
     .eq("id", user.id)
     .single();
+
+  if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+
+  // Server-side monthly quota — the ad-watch flow is client-only and can't be verified here,
+  // so this is a hard ceiling per plan to cap Groq spend regardless of claimed ad views.
+  const MONTHLY_CAP: Record<string, number | null> = { free: 15, basic: 20, pro: 70, advanced: null };
+  const plan = profile.plan || "free";
+  const cap = MONTHLY_CAP[plan] ?? 15;
+
+  if (cap !== null) {
+    const today = new Date();
+    const resetAt = profile.ai_proposals_reset_at ? new Date(profile.ai_proposals_reset_at) : null;
+    const isNewMonth = !resetAt || resetAt.getFullYear() !== today.getFullYear() || resetAt.getMonth() !== today.getMonth();
+    const currentCount = isNewMonth ? 0 : (profile.ai_proposals_count ?? 0);
+
+    if (currentCount >= cap) {
+      return NextResponse.json({ error: `Monthly AI proposal limit (${cap}) reached for your plan. Upgrade for a higher limit.` }, { status: 403 });
+    }
+
+    await supabase.from("profiles").update({
+      ai_proposals_count: currentCount + 1,
+      ai_proposals_reset_at: today.toISOString().slice(0, 10),
+    }).eq("id", user.id);
+  }
 
   const { projectDescription, clientName, clientEmail, clientCompany, budget, timeline } = await request.json();
 

@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email,
+    is_recurring, recurrence_interval, next_invoice_date,
   } = body;
 
   const subtotal: number = items.reduce(
@@ -27,14 +28,19 @@ export async function POST(request: Request) {
   const igst = gst_type === "igst" ? totalGst : 0;
   const total = subtotal + totalGst;
 
-  // Free plan: max 5 invoices total
   const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
-  if (!profile?.plan || profile.plan === "free") {
+  const plan = profile?.plan || "free";
+
+  // Free plan: max 5 invoices total
+  if (plan === "free") {
     const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", user.id);
     if ((count ?? 0) >= 5) {
       return NextResponse.json({ error: "Free plan limit reached. Upgrade to Basic or higher to create unlimited invoices." }, { status: 403 });
     }
   }
+
+  // Recurring invoices require Pro or higher
+  const wantsRecurring = !!is_recurring && ["pro", "advanced"].includes(plan);
 
   const invoiceNumber = await generateInvoiceNumber(supabase, user.id);
 
@@ -63,6 +69,9 @@ export async function POST(request: Request) {
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin,
     customer_email: customer_email || null,
+    is_recurring: wantsRecurring,
+    recurrence_interval: wantsRecurring ? recurrence_interval : null,
+    next_invoice_date: wantsRecurring ? next_invoice_date : null,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -100,6 +109,13 @@ export async function PATCH(request: Request) {
     is_recurring, recurrence_interval, next_invoice_date,
     payment_link, payment_link_id, reminder_sent_at,
   } = body;
+
+  if (is_recurring) {
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    if (!profile?.plan || !["pro", "advanced"].includes(profile.plan)) {
+      return NextResponse.json({ error: "Recurring invoices require a Pro plan or higher." }, { status: 403 });
+    }
+  }
 
   const updates: Record<string, unknown> = {};
   const allowed = {
