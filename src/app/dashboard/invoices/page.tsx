@@ -151,6 +151,7 @@ async function buildInvoicePdf(
   exchangeRate = 1,
   logoUrl?: string | null,
   signatureUrl?: string | null,
+  plan = "free",
 ) {
   const sym = currSym(currency);
   const rate = currency === "INR" ? 1 : exchangeRate;
@@ -325,6 +326,18 @@ async function buildInvoicePdf(
     doc.text(`* Amounts converted from INR at 1 INR = ${(1/rate).toFixed(4)} ${currency}`, 14, doc.internal.pageSize.getHeight() - 6);
   }
 
+  if (plan === "free") {
+    const pageH = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const totalPages = doc.getNumberOfPages();
+    for (let pg = 1; pg <= totalPages; pg++) {
+      doc.setPage(pg);
+      doc.setFontSize(7); doc.setTextColor(...gray); doc.setFont("helvetica", "normal");
+      doc.text("Created with FreelanceFlow", pageW - 14, pageH - 6, { align: "right" });
+    }
+    doc.setPage(totalPages);
+  }
+
   return doc;
 }
 
@@ -336,8 +349,9 @@ async function downloadInvoicePdf(
   exchangeRate = 1,
   logoUrl?: string | null,
   signatureUrl?: string | null,
+  plan = "free",
 ) {
-  const doc = await buildInvoicePdf(inv, accentHex, template, currency, exchangeRate, logoUrl, signatureUrl);
+  const doc = await buildInvoicePdf(inv, accentHex, template, currency, exchangeRate, logoUrl, signatureUrl, plan);
   doc.save(`${inv.invoice_number}.pdf`);
 }
 
@@ -840,7 +854,7 @@ function InvoicesPageInner() {
     try {
       let pdfBase64: string | null = null;
       try {
-        const doc = await buildInvoicePdf(sendTarget, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature);
+        const doc = await buildInvoicePdf(sendTarget, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx);
         pdfBase64 = doc.output("datauristring");
       } catch { /* proceed without PDF if generation fails */ }
 
@@ -1229,7 +1243,7 @@ function InvoicesPageInner() {
                   </button>}
                   {inv.seller_gstin && <button onClick={() => setIrnTarget(inv)} className="text-gray-400 hover:text-violet-600" title="Generate E-Invoice JSON"><FileCode size={15} /></button>}
                   <button onClick={() => duplicateInvoice(inv)} className="text-gray-400 hover:text-violet-600" title="Duplicate invoice"><Copy size={15} /></button>
-                  <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
+                  <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
                   {inv.status === "unpaid" && <button onClick={() => markPaid(inv)} className="text-gray-400 hover:text-green-600" title="Mark as paid"><CheckCircle size={16} /></button>}
                   <button onClick={() => deleteInvoice(inv.id)} className="text-gray-400 hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
                 </div>
@@ -1434,7 +1448,7 @@ function InvoicesPageInner() {
               <div>
                 <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Accent Color</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
+                  {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000","#0d9488","#4f46e5","#475569","#e11d48"].map(c => (
                     <button key={c} onClick={() => setPdfColor(c)} className="w-6 h-6 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
                   ))}
                   <label className="relative w-6 h-6 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
@@ -1446,7 +1460,7 @@ function InvoicesPageInner() {
               </div>
               {/* Action buttons */}
               <div className="flex gap-2">
-                <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
+                <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
                   <Download size={16} /> Download PDF
                 </Button>
                 {canSendEmail && <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">

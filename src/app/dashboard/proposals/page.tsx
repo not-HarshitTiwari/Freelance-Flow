@@ -62,6 +62,7 @@ export default function ProposalsPage() {
   const [searchQ, setSearchQ] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [aiUsage, setAiUsage] = useState<{ used: number; cap: number | null } | null>(null);
   const [form, setForm] = useState({
     clientName: "",
     clientEmail: "",
@@ -83,11 +84,24 @@ export default function ProposalsPage() {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       const [{ data: profile }, { data: clientData }] = await Promise.all([
-        supabase.from("profiles").select("plan").eq("id", user.id).single(),
+        supabase.from("profiles").select("plan, ai_proposals_count, ai_proposals_reset_at").eq("id", user.id).single(),
         supabase.from("clients").select("id, name, email, company").eq("user_id", user.id).order("name"),
       ]);
       setIsPro((profile?.plan !== "free" && !!profile?.plan) || planAtLeast(planCtx, "basic"));
       setClients(clientData || []);
+
+      // Mirrors the hard server-side cap in /api/proposals (POST) so users see it before they hit it.
+      const MONTHLY_CAP: Record<string, number | null> = { free: 15, basic: 20, pro: 70, advanced: null };
+      const plan = profile?.plan || "free";
+      const cap = MONTHLY_CAP[plan] ?? 15;
+      if (cap === null) {
+        setAiUsage({ used: 0, cap: null });
+      } else {
+        const now = new Date();
+        const resetAt = profile?.ai_proposals_reset_at ? new Date(profile.ai_proposals_reset_at) : null;
+        const isNewMonth = !resetAt || resetAt.getFullYear() !== now.getFullYear() || resetAt.getMonth() !== now.getMonth();
+        setAiUsage({ used: isNewMonth ? 0 : (profile?.ai_proposals_count ?? 0), cap });
+      }
     });
   }, [fetchProposals]);
 
@@ -124,6 +138,7 @@ export default function ProposalsPage() {
       setForm({ clientName: "", clientEmail: "", clientCompany: "", projectDescription: "", budget: "", timeline: "" });
       setSelectedClientId("");
       fetchProposals();
+      setAiUsage(u => u && u.cap !== null ? { ...u, used: u.used + 1 } : u);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate proposal");
     } finally {
@@ -247,6 +262,7 @@ export default function ProposalsPage() {
       setForm({ clientName: "", clientEmail: "", clientCompany: "", projectDescription: "", budget: "", timeline: "" });
       setSelectedClientId("");
       fetchProposals();
+      setAiUsage(u => u && u.cap !== null ? { ...u, used: u.used + 1 } : u);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate proposal");
     } finally {
@@ -270,6 +286,20 @@ export default function ProposalsPage() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
             {planAtLeast(planCtx, "advanced") ? "Unlimited AI proposals" : planAtLeast(planCtx, "pro") ? "50 free AI proposals/month, then watch 1 ad" : planAtLeast(planCtx, "basic") ? "5 free AI proposals/month, then watch 2 ads" : "Watch 2 ads per AI proposal"}
           </p>
+          {aiUsage && aiUsage.cap !== null && (
+            <div className="mt-2 max-w-44">
+              <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 mb-1">
+                <span>AI proposals this month</span>
+                <span className={aiUsage.used >= aiUsage.cap ? "text-red-500 font-medium" : ""}>{aiUsage.used}/{aiUsage.cap}</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${aiUsage.used >= aiUsage.cap ? "bg-red-500" : "bg-violet-500"}`}
+                  style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.cap) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
         {planAtLeast(planCtx, "basic") ? (
         <Dialog open={open} onOpenChange={setOpen}>
