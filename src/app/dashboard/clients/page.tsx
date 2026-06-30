@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
-import { usePlan } from "@/lib/plan-context";
 import { toast } from "sonner";
 
 type Client = {
