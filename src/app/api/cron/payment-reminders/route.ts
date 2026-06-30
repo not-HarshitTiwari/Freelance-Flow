@@ -31,24 +31,25 @@ export async function GET(req: Request) {
   let sent = 0;
 
   for (const inv of overdueInvoices ?? []) {
-    // Don't spam — only send if no reminder in last 3 days
-    if (inv.reminder_sent_at) {
-      const lastSent = new Date(inv.reminder_sent_at);
-      const daysSince = (Date.now() - lastSent.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSince < 3) continue;
-    }
-
     const remaining = inv.total - (inv.amount_paid ?? 0);
     if (remaining <= 0) continue; // fully paid partial, skip
 
-    // Get user's SMTP settings
+    // Get user's SMTP settings and reminder cadence
     const { data: profile } = await supabase
       .from("profiles")
-      .select("smtp_email, smtp_password, full_name, business_name")
+      .select("smtp_email, smtp_password, full_name, business_name, reminder_cadence_days")
       .eq("id", inv.user_id)
       .single();
 
     if (!profile?.smtp_email || !profile?.smtp_password) continue;
+
+    // Don't spam — only send if no reminder within the user's configured cadence
+    const cadenceDays = profile.reminder_cadence_days ?? 3;
+    if (inv.reminder_sent_at) {
+      const lastSent = new Date(inv.reminder_sent_at);
+      const daysSince = (Date.now() - lastSent.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSince < cadenceDays) continue;
+    }
 
     try {
       const transporter = nodemailer.createTransport({
