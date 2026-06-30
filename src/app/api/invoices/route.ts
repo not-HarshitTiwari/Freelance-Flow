@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
+import { calculateGst } from "@/lib/gst";
 
 const STOCK_WARNING = "Invoice saved, but some stock counts couldn't be updated automatically.";
 
@@ -20,16 +21,7 @@ export async function POST(request: Request) {
     is_recurring, recurrence_interval, next_invoice_date,
   } = body;
 
-  const subtotal: number = items.reduce(
-    (sum: number, item: { quantity: number; rate: number }) => sum + item.quantity * item.rate,
-    0
-  );
-
-  const totalGst = (subtotal * (gst_rate || 0)) / 100;
-  const cgst = gst_type === "cgst_sgst" ? totalGst / 2 : 0;
-  const sgst = gst_type === "cgst_sgst" ? totalGst / 2 : 0;
-  const igst = gst_type === "igst" ? totalGst : 0;
-  const total = subtotal + totalGst;
+  const { subtotal, totalGst, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
 
   const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
   const plan = profile?.plan || "free";
