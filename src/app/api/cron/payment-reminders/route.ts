@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { sendLowStockAlerts } from "@/lib/low-stock-alerts";
 
 // Vercel cron calls this every day at 9am IST
 export async function GET(req: Request) {
@@ -21,17 +22,15 @@ export async function GET(req: Request) {
     .lt("due_date", today)
     .not("customer_email", "is", null);
 
-  if (!overdueInvoices?.length) return NextResponse.json({ sent: 0 });
-
   // Mark all overdue unpaid invoices as "overdue" in the DB
-  const unpaidIds = overdueInvoices.filter(i => i.status === "unpaid").map(i => i.id);
+  const unpaidIds = (overdueInvoices ?? []).filter(i => i.status === "unpaid").map(i => i.id);
   if (unpaidIds.length > 0) {
     await supabase.from("invoices").update({ status: "overdue" }).in("id", unpaidIds);
   }
 
   let sent = 0;
 
-  for (const inv of overdueInvoices) {
+  for (const inv of overdueInvoices ?? []) {
     // Don't spam — only send if no reminder in last 3 days
     if (inv.reminder_sent_at) {
       const lastSent = new Date(inv.reminder_sent_at);
@@ -89,5 +88,7 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ sent });
+  const lowStockAlertsSent = await sendLowStockAlerts(supabase);
+
+  return NextResponse.json({ sent, lowStockAlertsSent });
 }

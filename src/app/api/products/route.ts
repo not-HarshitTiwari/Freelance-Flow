@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, description, type, unit_price, unit, hsn_code, track_inventory, quantity } = body;
+  const { name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold } = body;
 
   const trackInventory = type === "product" && !!track_inventory;
 
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       hsn_code: hsn_code || null,
       track_inventory: trackInventory,
       quantity: trackInventory ? parseFloat(quantity) || 0 : null,
+      low_stock_threshold: trackInventory ? (parseFloat(low_stock_threshold) || 3) : 3,
     })
     .select()
     .single();
@@ -51,7 +52,7 @@ export async function PATCH(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, name, description, type, unit_price, unit, hsn_code, track_inventory, quantity } = await req.json();
+  const { id, name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold } = await req.json();
 
   const trackInventory = type === "product" && !!track_inventory;
 
@@ -66,6 +67,8 @@ export async function PATCH(req: Request) {
       hsn_code: hsn_code || null,
       track_inventory: trackInventory,
       quantity: trackInventory ? parseFloat(quantity) || 0 : null,
+      low_stock_threshold: trackInventory ? (parseFloat(low_stock_threshold) || 3) : 3,
+      low_stock_alert_sent_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

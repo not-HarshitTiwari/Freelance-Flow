@@ -19,11 +19,12 @@ type Product = {
   hsn_code: string | null;
   track_inventory: boolean;
   quantity: number | null;
+  low_stock_threshold: number | null;
 };
 
 const empty = {
   name: "", description: "", type: "service" as "product" | "service",
-  unit_price: "", unit: "unit", hsn_code: "", track_inventory: false, quantity: "",
+  unit_price: "", unit: "unit", hsn_code: "", track_inventory: false, quantity: "", low_stock_threshold: "3",
 };
 
 export default function ProductsPage() {
@@ -79,6 +80,7 @@ export default function ProductsPage() {
       name: p.name, description: p.description || "", type: p.type,
       unit_price: String(p.unit_price), unit: p.unit || "unit", hsn_code: p.hsn_code || "",
       track_inventory: p.track_inventory, quantity: p.quantity != null ? String(p.quantity) : "",
+      low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : "3",
     });
     setOpen(true);
   }
@@ -248,9 +250,15 @@ export default function ProductsPage() {
                     Track stock for this product
                   </label>
                   {form.track_inventory && (
-                    <div className="space-y-1.5">
-                      <Label>Quantity in stock</Label>
-                      <Input type="number" min="0" step="1" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Quantity in stock</Label>
+                        <Input type="number" min="0" step="1" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Low-stock alert at</Label>
+                        <Input type="number" min="0" step="1" placeholder="3" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -274,6 +282,7 @@ export default function ProductsPage() {
         <div className="space-y-2">
           {products.map(p => {
             const outOfStock = p.track_inventory && (p.quantity ?? 0) <= 0;
+            const lowStock = p.track_inventory && !outOfStock && (p.quantity ?? 0) <= (p.low_stock_threshold ?? 3);
             return (
               <Card key={p.id}>
                 <CardContent className="p-4 flex items-center justify-between">
@@ -286,9 +295,9 @@ export default function ProductsPage() {
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
                         {p.type === "product" ? "Product" : "Service"} • ₹{p.unit_price.toLocaleString("en-IN")}/{p.unit || "unit"}
                         {p.track_inventory && (
-                          <span className={outOfStock ? "text-red-500 flex items-center gap-1" : ""}>
-                            {outOfStock && <AlertTriangle size={11} />}
-                            • {outOfStock ? "Out of stock" : `${p.quantity} in stock`}
+                          <span className={outOfStock || lowStock ? "text-red-500 flex items-center gap-1" : ""}>
+                            {(outOfStock || lowStock) && <AlertTriangle size={11} />}
+                            • {outOfStock ? "Out of stock" : lowStock ? `Low stock — ${p.quantity} left` : `${p.quantity} in stock`}
                           </span>
                         )}
                       </p>
