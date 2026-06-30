@@ -159,7 +159,7 @@ export default function TaxReportPage() {
               </thead>
               <tbody>
                 {monthly.map(m => (
-                  <tr key={m.month} className="border-b dark:border-gray-800">
+                  <tr key={`${year}-${quarter}-${m.month}`} className="border-b dark:border-gray-800">
                     <td className="py-2.5 pr-4 font-medium text-gray-900 dark:text-white">{m.month}</td>
                     <td className="py-2.5 pr-4 text-gray-500 dark:text-gray-400">{m.invoices}</td>
                     <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{fmt(m.subtotal)}</td>

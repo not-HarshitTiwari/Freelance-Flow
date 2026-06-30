@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import Image from "next/image";
+import { PayNowButton } from "@/components/portal/PayNowButton";
 
 const statusColors: Record<string, string> = {
   paid: "bg-green-100 text-green-700",
@@ -55,7 +56,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
         ) : (
           <div className="space-y-3">
             {invoices.map((inv: {
-              invoice_number: string; invoice_date: string; due_date: string | null;
+              id: string; invoice_number: string; invoice_date: string; due_date: string | null;
               total: number; status: string; payment_method: string | null; payment_methods: string[] | null;
               upi_id: string | null; bank_account_name: string | null; bank_account_number: string | null;
               bank_ifsc: string | null; bank_name: string | null; payment_link: string | null;
@@ -79,6 +80,13 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
 
                   {inv.status !== "paid" && (
                     <div className="space-y-2 mt-2">
+                      <PayNowButton
+                        invoiceId={inv.id}
+                        invoiceNumber={inv.invoice_number}
+                        portalToken={token}
+                        clientName={client?.name}
+                        clientEmail={client?.email}
+                      />
                       {inv.payment_link && (
                         <a
                           href={inv.payment_link}
