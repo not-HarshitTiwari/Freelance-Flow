@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { IndianRupee, TrendingUp, Receipt, Users, BarChart3 } from "lucide-react";
-import { RevenueExpenseChart } from "@/components/dashboard/RevenueExpenseChart";
+import { IndianRupee, TrendingUp, Receipt, BarChart3, ChevronDown } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 
+type InvItem = { name: string; qty: number; price: number; amount: number };
 type InvRow = {
   total: number;
   status: string;
@@ -14,6 +14,7 @@ type InvRow = {
   customer_name: string | null;
   customer_company: string | null;
   amount_paid: number | null;
+  items: InvItem[] | null;
 };
 type ExpRow = { amount: number; date: string; category: string };
 
@@ -31,95 +32,369 @@ const STATUS_COLORS: Record<string, string> = {
   overdue: "#dc2626",
 };
 
+const CHART_OPTIONS = [
+  { value: "rev_exp", label: "Revenue vs Expenses" },
+  { value: "cash_flow", label: "Monthly Cash Flow" },
+  { value: "by_client", label: "Revenue by Client" },
+  { value: "by_product", label: "Revenue by Product" },
+  { value: "by_category", label: "Expenses by Category" },
+  { value: "inv_status", label: "Invoice Status" },
+];
+
 function earnedFor(i: InvRow) {
   return i.status === "paid" ? i.total : i.status === "partial" ? (i.amount_paid ?? 0) : 0;
 }
 
-export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvRow[]; expenses: ExpRow[]; isFree: boolean }) {
-  const [rangeMonths, setRangeMonths] = useState(6);
+function fmt(n: number) {
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
 
-  const cutoff = useMemo(() => {
+function GroupedBarChart({ data }: { data: { month: string; revenue: number; expenses: number }[] }) {
+  const maxVal = Math.max(...data.flatMap(d => [d.revenue, d.expenses]), 1);
+  const H = 180, W = 500, PAD_L = 46, PAD_B = 28, PAD_T = 20, PAD_R = 8;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_B - PAD_T;
+  const groupW = chartW / (data.length || 1);
+  const barW = Math.min(groupW * 0.35, 20);
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+      {ticks.map(t => {
+        const v = maxVal * t;
+        const y = PAD_T + chartH - t * chartH;
+        return (
+          <g key={t}>
+            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="#e5e7eb" strokeWidth="0.5" className="dark:stroke-gray-700" />
+            <text x={PAD_L - 3} y={y + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">
+              {v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+      {data.map((d, i) => {
+        const cx = PAD_L + i * groupW + groupW / 2;
+        const revH = Math.max((d.revenue / maxVal) * chartH, d.revenue > 0 ? 1 : 0);
+        const expH = Math.max((d.expenses / maxVal) * chartH, d.expenses > 0 ? 1 : 0);
+        return (
+          <g key={d.month}>
+            <rect x={cx - barW - 1} y={PAD_T + chartH - revH} width={barW} height={revH} fill="#7c3aed" rx={2} />
+            <rect x={cx + 1} y={PAD_T + chartH - expH} width={barW} height={expH} fill="#f87171" rx={2} />
+            <text x={cx} y={H - 6} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{d.month}</text>
+          </g>
+        );
+      })}
+      <rect x={PAD_L} y={5} width={8} height={8} fill="#7c3aed" rx={1.5} />
+      <text x={PAD_L + 11} y={12} fontSize={8} fill="#6b7280">Revenue</text>
+      <rect x={PAD_L + 60} y={5} width={8} height={8} fill="#f87171" rx={1.5} />
+      <text x={PAD_L + 71} y={12} fontSize={8} fill="#6b7280">Expenses</text>
+    </svg>
+  );
+}
+
+function CashFlowChart({ data }: { data: { month: string; net: number }[] }) {
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.net)), 1);
+  const H = 180, W = 500, PAD_L = 50, PAD_B = 28, PAD_T = 16, PAD_R = 8;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_B - PAD_T;
+  const zeroY = PAD_T + chartH / 2;
+  const barW = Math.min((chartW / (data.length || 1)) * 0.55, 28);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+      <line x1={PAD_L} y1={zeroY} x2={W - PAD_R} y2={zeroY} stroke="#6b7280" strokeWidth="0.8" strokeDasharray="4,3" />
+      <text x={PAD_L - 3} y={zeroY + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">0</text>
+      {data.map((d, i) => {
+        const cx = PAD_L + (i + 0.5) * (chartW / (data.length || 1));
+        const half = chartH / 2;
+        const h = Math.max(Math.min(Math.abs(d.net) / maxAbs * half, half), d.net !== 0 ? 1 : 0);
+        const y = d.net >= 0 ? zeroY - h : zeroY;
+        return (
+          <g key={d.month}>
+            <rect x={cx - barW / 2} y={y} width={barW} height={h} fill={d.net >= 0 ? "#16a34a" : "#dc2626"} rx={2} />
+            <text x={cx} y={H - 6} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{d.month}</text>
+            {Math.abs(d.net) >= 100 && (
+              <text x={cx} y={d.net >= 0 ? y - 2 : y + h + 8} textAnchor="middle" fontSize={7} fill={d.net >= 0 ? "#16a34a" : "#dc2626"}>
+                {d.net >= 0 ? "+" : ""}{(d.net / 1000).toFixed(0)}k
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function HBarChart({ items }: { items: { label: string; amount: number; color: string }[] }) {
+  const max = Math.max(...items.map(i => i.amount), 1);
+  return (
+    <div className="space-y-3">
+      {items.slice(0, 10).map(item => (
+        <div key={item.label}>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-700 dark:text-gray-300 font-medium truncate max-w-[62%]">{item.label}</span>
+            <span className="text-gray-900 dark:text-white font-semibold shrink-0 ml-2">{fmt(item.amount)}</span>
+          </div>
+          <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${(item.amount / max) * 100}%`, backgroundColor: item.color }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DonutChart({ slices }: { slices: { label: string; value: number; color: string; count: number }[] }) {
+  const total = slices.reduce((s, x) => s + x.value, 0) || 1;
+  const R = 68, r = 38, CX = 88, CY = 88;
+  let angle = -Math.PI / 2;
+
+  const paths = slices.map(s => {
+    const sweep = (s.value / total) * Math.PI * 2;
+    const clamped = Math.min(sweep, Math.PI * 2 - 0.001);
+    const ox1 = CX + R * Math.cos(angle);
+    const oy1 = CY + R * Math.sin(angle);
+    const ix1 = CX + r * Math.cos(angle);
+    const iy1 = CY + r * Math.sin(angle);
+    angle += clamped;
+    const ox2 = CX + R * Math.cos(angle);
+    const oy2 = CY + R * Math.sin(angle);
+    const ix2 = CX + r * Math.cos(angle);
+    const iy2 = CY + r * Math.sin(angle);
+    const la = clamped > Math.PI ? 1 : 0;
+    const d = `M${ox1},${oy1} A${R},${R} 0 ${la} 1 ${ox2},${oy2} L${ix2},${iy2} A${r},${r} 0 ${la} 0 ${ix1},${iy1} Z`;
+    return { d, ...s };
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <svg viewBox="0 0 176 176" className="w-36 h-36 shrink-0">
+        {slices.length === 1 ? (
+          <>
+            <circle cx={CX} cy={CY} r={R} fill={slices[0].color} />
+            <circle cx={CX} cy={CY} r={r} fill="white" className="dark:fill-gray-900" />
+          </>
+        ) : (
+          paths.map((p, i) => (
+            <path key={i} d={p.d} fill={p.color} stroke="white" strokeWidth={1.5} className="dark:stroke-gray-900" />
+          ))
+        )}
+      </svg>
+      <div className="space-y-2 min-w-0">
+        {slices.map(s => (
+          <div key={s.label} className="flex items-center gap-2 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="text-gray-700 dark:text-gray-300 capitalize font-medium">{s.label}</span>
+            <span className="text-gray-400 dark:text-gray-500">({s.count})</span>
+            <span className="text-gray-900 dark:text-white font-semibold ml-auto pl-3">{fmt(s.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function AnalyticsClient({
+  invoices,
+  expenses,
+  isFree,
+}: {
+  invoices: InvRow[];
+  expenses: ExpRow[];
+  isFree: boolean;
+}) {
+  const [rangeMonths, setRangeMonths] = useState(6);
+  const [useCustom, setUseCustom] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [chartType, setChartType] = useState("rev_exp");
+
+  const { cutoff, endCutoff } = useMemo(() => {
+    if (useCustom && fromDate) {
+      return {
+        cutoff: new Date(fromDate),
+        endCutoff: toDate ? new Date(toDate + "T23:59:59") : new Date(),
+      };
+    }
     const d = new Date();
     d.setMonth(d.getMonth() - rangeMonths + 1);
     d.setDate(1);
     d.setHours(0, 0, 0, 0);
-    return d;
-  }, [rangeMonths]);
+    return { cutoff: d, endCutoff: new Date() };
+  }, [rangeMonths, useCustom, fromDate, toDate]);
 
   const rangeInvoices = useMemo(
-    () => invoices.filter(i => new Date(i.invoice_date || i.created_at) >= cutoff),
-    [invoices, cutoff]
+    () => invoices.filter(i => {
+      const dt = new Date(i.invoice_date || i.created_at);
+      return dt >= cutoff && dt <= endCutoff;
+    }),
+    [invoices, cutoff, endCutoff]
   );
-  const rangeExpenses = useMemo(() => expenses.filter(e => new Date(e.date) >= cutoff), [expenses, cutoff]);
+
+  const rangeExpenses = useMemo(
+    () => expenses.filter(e => {
+      const dt = new Date(e.date);
+      return dt >= cutoff && dt <= endCutoff;
+    }),
+    [expenses, cutoff, endCutoff]
+  );
 
   const totalRevenue = rangeInvoices.reduce((s, i) => s + earnedFor(i), 0);
   const totalExpenses = rangeExpenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = totalRevenue - totalExpenses;
   const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
   const outstanding = rangeInvoices.reduce(
-    (s, i) => s + (i.status === "unpaid" || i.status === "overdue" ? i.total : i.status === "partial" ? i.total - (i.amount_paid ?? 0) : 0),
+    (s, i) =>
+      s +
+      (i.status === "unpaid" || i.status === "overdue"
+        ? i.total
+        : i.status === "partial"
+        ? i.total - (i.amount_paid ?? 0)
+        : 0),
     0
   );
-  const avgInvoiceValue = rangeInvoices.length > 0 ? rangeInvoices.reduce((s, i) => s + i.total, 0) / rangeInvoices.length : 0;
+  const avgInvoiceValue =
+    rangeInvoices.length > 0
+      ? rangeInvoices.reduce((s, i) => s + i.total, 0) / rangeInvoices.length
+      : 0;
 
-  const monthly = useMemo(() => {
-    const months: { month: string; revenue: number; expenses: number }[] = [];
-    for (let idx = rangeMonths - 1; idx >= 0; idx--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - idx);
-      const label = d.toLocaleString("en-IN", { month: "short", ...(rangeMonths > 12 ? { year: "2-digit" as const } : {}) });
-      const y = d.getFullYear(), m = d.getMonth();
+  const monthlyData = useMemo(() => {
+    const buildMonth = (y: number, m: number, label: string, fromFilter?: Date, toFilter?: Date) => {
       const mInv = invoices.filter(i => {
         const dt = new Date(i.invoice_date || i.created_at);
-        return dt.getFullYear() === y && dt.getMonth() === m;
+        if (dt.getFullYear() !== y || dt.getMonth() !== m) return false;
+        if (fromFilter && dt < fromFilter) return false;
+        if (toFilter && dt > toFilter) return false;
+        return true;
       });
       const mExp = expenses.filter(e => {
         const dt = new Date(e.date);
-        return dt.getFullYear() === y && dt.getMonth() === m;
+        if (dt.getFullYear() !== y || dt.getMonth() !== m) return false;
+        if (fromFilter && dt < fromFilter) return false;
+        if (toFilter && dt > toFilter) return false;
+        return true;
       });
-      months.push({
-        month: label,
-        revenue: mInv.reduce((s, i) => s + earnedFor(i), 0),
-        expenses: mExp.reduce((s, e) => s + e.amount, 0),
-      });
-    }
-    return months;
-  }, [invoices, expenses, rangeMonths]);
+      const rev = mInv.reduce((s, i) => s + earnedFor(i), 0);
+      const exp = mExp.reduce((s, e) => s + e.amount, 0);
+      return { month: label, revenue: rev, expenses: exp, net: rev - exp };
+    };
 
-  const statusBreakdown = useMemo(() => {
-    const counts: Record<string, { count: number; amount: number }> = {};
-    for (const i of rangeInvoices) {
-      const key = i.status || "unpaid";
-      if (!counts[key]) counts[key] = { count: 0, amount: 0 };
-      counts[key].count++;
-      counts[key].amount += i.total;
+    if (useCustom && fromDate && toDate) {
+      const from = new Date(fromDate);
+      const to = new Date(toDate + "T23:59:59");
+      const result = [];
+      const cur = new Date(from.getFullYear(), from.getMonth(), 1);
+      while (cur <= to) {
+        const y = cur.getFullYear(), m = cur.getMonth();
+        const label = cur.toLocaleString("en-IN", { month: "short", year: "2-digit" });
+        result.push(buildMonth(y, m, label, from, to));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+      return result;
     }
-    const totalAmount = Object.values(counts).reduce((s, c) => s + c.amount, 0) || 1;
-    return Object.entries(counts)
-      .map(([status, v]) => ({ status, ...v, pct: (v.amount / totalAmount) * 100 }))
-      .sort((a, b) => b.amount - a.amount);
+
+    return Array.from({ length: rangeMonths }, (_, idx) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - (rangeMonths - 1 - idx));
+      const label = d.toLocaleString("en-IN", {
+        month: "short",
+        ...(rangeMonths > 12 ? { year: "2-digit" as const } : {}),
+      });
+      return buildMonth(d.getFullYear(), d.getMonth(), label);
+    });
+  }, [invoices, expenses, rangeMonths, useCustom, fromDate, toDate]);
+
+  const byClientData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const i of rangeInvoices) {
+      const earned = earnedFor(i);
+      if (earned > 0) {
+        const name = i.customer_name || i.customer_company || "Unknown";
+        map[name] = (map[name] || 0) + earned;
+      }
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([label, amount]) => ({ label, amount, color: "#7c3aed" }));
   }, [rangeInvoices]);
 
-  const categoryBreakdown = useMemo(() => {
-    const byCategory = rangeExpenses.reduce<Record<string, number>>((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + e.amount;
-      return acc;
-    }, {});
-    const max = Math.max(...Object.values(byCategory), 1);
-    return Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([category, amount]) => ({ category, amount, pct: (amount / max) * 100 }));
+  const byProductData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const i of rangeInvoices) {
+      if (!i.items?.length) continue;
+      const earned = earnedFor(i);
+      if (earned === 0) continue;
+      const ratio = earned / (i.total || 1);
+      for (const item of i.items) {
+        const name = item.name || "Other";
+        map[name] = (map[name] || 0) + (item.amount || 0) * ratio;
+      }
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([label, amount]) => ({ label, amount, color: "#0ea5e9" }));
+  }, [rangeInvoices]);
+
+  const byCategoryData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const e of rangeExpenses) {
+      map[e.category] = (map[e.category] || 0) + e.amount;
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([label, amount]) => ({ label, amount, color: "#f87171" }));
   }, [rangeExpenses]);
 
-  const topClients = useMemo(() => {
-    const byClient = rangeInvoices
-      .filter(i => i.status === "paid")
-      .reduce<Record<string, number>>((acc, i) => {
-        const name = i.customer_name || i.customer_company || "Unknown";
-        acc[name] = (acc[name] || 0) + i.total;
-        return acc;
-      }, {});
-    const max = Math.max(...Object.values(byClient), 1);
-    return Object.entries(byClient).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, amount]) => ({ name, amount, pct: (amount / max) * 100 }));
+  const statusSlices = useMemo(() => {
+    const map: Record<string, { amount: number; count: number }> = {};
+    for (const i of rangeInvoices) {
+      const k = i.status || "unpaid";
+      if (!map[k]) map[k] = { amount: 0, count: 0 };
+      map[k].amount += i.total;
+      map[k].count++;
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1].amount - a[1].amount)
+      .map(([label, v]) => ({ label, value: v.amount, count: v.count, color: STATUS_COLORS[label] || "#6b7280" }));
   }, [rangeInvoices]);
+
+  const selectedChart = CHART_OPTIONS.find(o => o.value === chartType) ?? CHART_OPTIONS[0];
+
+  function renderChart() {
+    const empty = (msg: string) => (
+      <p className="text-sm text-gray-400 text-center py-10">{msg}</p>
+    );
+    switch (chartType) {
+      case "rev_exp":
+        return <GroupedBarChart data={monthlyData} />;
+      case "cash_flow":
+        return <CashFlowChart data={monthlyData.map(d => ({ month: d.month, net: d.net }))} />;
+      case "by_client":
+        return byClientData.length > 0
+          ? <HBarChart items={byClientData} />
+          : empty("No paid revenue in this range");
+      case "by_product":
+        return byProductData.length > 0
+          ? <HBarChart items={byProductData} />
+          : empty("No product data — add line items to your invoices");
+      case "by_category":
+        return byCategoryData.length > 0
+          ? <HBarChart items={byCategoryData} />
+          : empty("No expenses in this range");
+      case "inv_status":
+        return statusSlices.length > 0
+          ? <DonutChart slices={statusSlices} />
+          : empty("No invoices in this range");
+      default:
+        return null;
+    }
+  }
 
   return (
     <div>
@@ -128,22 +403,53 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Revenue, expenses and client trends</p>
         </div>
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          {RANGES.map(r => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            {RANGES.map(r => (
+              <button
+                key={r.months}
+                onClick={() => { setRangeMonths(r.months); setUseCustom(false); }}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  !useCustom && rangeMonths === r.months
+                    ? "bg-violet-600 text-white"
+                    : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
             <button
-              key={r.months}
-              onClick={() => setRangeMonths(r.months)}
+              onClick={() => setUseCustom(true)}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                rangeMonths === r.months
+                useCustom
                   ? "bg-violet-600 text-white"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
               }`}
             >
-              {r.label}
+              Custom
             </button>
-          ))}
+          </div>
         </div>
       </div>
+
+      {useCustom && (
+        <div className="flex flex-wrap items-center gap-3 mb-6 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700">
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">From</span>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            className="h-8 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-2 text-gray-900 dark:text-gray-100 outline-none"
+          />
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-300">to</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={e => setToDate(e.target.value)}
+            className="h-8 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-2 text-gray-900 dark:text-gray-100 outline-none"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <Card>
@@ -154,7 +460,7 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{totalRevenue.toLocaleString("en-IN")}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(totalRevenue)}</p>
               </div>
             </div>
           </CardContent>
@@ -167,7 +473,7 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Expenses</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{totalExpenses.toLocaleString("en-IN")}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(totalExpenses)}</p>
               </div>
             </div>
           </CardContent>
@@ -175,12 +481,27 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${netProfit >= 0 ? "bg-violet-100 dark:bg-violet-900/40" : "bg-red-100 dark:bg-red-900/40"}`}>
-                <TrendingUp size={18} className={netProfit >= 0 ? "text-violet-600 dark:text-violet-400" : "text-red-500"} />
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  netProfit >= 0 ? "bg-violet-100 dark:bg-violet-900/40" : "bg-red-100 dark:bg-red-900/40"
+                }`}
+              >
+                <TrendingUp
+                  size={18}
+                  className={netProfit >= 0 ? "text-violet-600 dark:text-violet-400" : "text-red-500"}
+                />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Net Profit ({profitMargin.toFixed(0)}% margin)</p>
-                <p className={`text-xl font-bold ${netProfit >= 0 ? "text-gray-900 dark:text-white" : "text-red-500"}`}>₹{netProfit.toLocaleString("en-IN")}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Net Profit ({profitMargin.toFixed(0)}% margin)
+                </p>
+                <p
+                  className={`text-xl font-bold ${
+                    netProfit >= 0 ? "text-gray-900 dark:text-white" : "text-red-500"
+                  }`}
+                >
+                  {fmt(netProfit)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -193,7 +514,7 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Outstanding</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{outstanding.toLocaleString("en-IN")}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(outstanding)}</p>
               </div>
             </div>
           </CardContent>
@@ -206,7 +527,7 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Avg Invoice Value</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{avgInvoiceValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(avgInvoiceValue)}</p>
               </div>
             </div>
           </CardContent>
@@ -228,84 +549,34 @@ export function AnalyticsClient({ invoices, expenses, isFree }: { invoices: InvR
 
       <Card className="mb-8">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2 dark:text-white">
-            <TrendingUp size={16} className="text-violet-600" /> Revenue vs Expenses
-          </CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base flex items-center gap-2 dark:text-white">
+              <BarChart3 size={16} className="text-violet-600" />
+              {selectedChart.label}
+            </CardTitle>
+            <div className="relative">
+              <select
+                value={chartType}
+                onChange={e => setChartType(e.target.value)}
+                className="h-8 pl-3 pr-7 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-xs font-medium text-gray-700 dark:text-gray-300 cursor-pointer appearance-none outline-none"
+              >
+                {CHART_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={13}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <RevenueExpenseChart data={monthly} />
-        </CardContent>
+        <CardContent>{renderChart()}</CardContent>
       </Card>
 
       {isFree && <AdBanner format="horizontal" className="mb-8" />}
-
-      <div className="grid md:grid-cols-2 gap-4 mb-8">
-        {statusBreakdown.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base dark:text-white">Invoice Status Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {statusBreakdown.map(s => (
-                <div key={s.status} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700 dark:text-gray-300 font-medium capitalize">{s.status} ({s.count})</span>
-                    <span className="text-gray-900 dark:text-white font-semibold">₹{s.amount.toLocaleString("en-IN")} · {s.pct.toFixed(0)}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${s.pct}%`, backgroundColor: STATUS_COLORS[s.status] || "#6b7280" }} />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {categoryBreakdown.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base dark:text-white">Expenses by Category</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {categoryBreakdown.map(c => (
-                <div key={c.category} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700 dark:text-gray-300 font-medium">{c.category}</span>
-                    <span className="text-gray-900 dark:text-white font-semibold">₹{c.amount.toLocaleString("en-IN")}</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-400 rounded-full" style={{ width: `${c.pct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {topClients.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 dark:text-white">
-              <Users size={16} className="text-violet-600" /> Top Clients by Revenue
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {topClients.map(c => (
-              <div key={c.name} className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700 dark:text-gray-300 font-medium truncate max-w-xs">{c.name}</span>
-                  <span className="text-gray-900 dark:text-white font-semibold shrink-0 ml-4">₹{c.amount.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${c.pct}%` }} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
       {isFree && <AdBanner format="rectangle" className="max-w-sm mx-auto" />}
     </div>
   );
