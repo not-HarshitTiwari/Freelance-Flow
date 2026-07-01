@@ -188,7 +188,13 @@ function HBarChart({ items }: { items: { label: string; amount: number; color: s
   );
 }
 
-function DonutChart({ slices }: { slices: { label: string; value: number; color: string; count: number }[] }) {
+function DonutChart({
+  slices,
+  size = 144,
+}: {
+  slices: { label: string; value: number; color: string; count: number }[];
+  size?: number;
+}) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   const R = 68, r = 38, CX = 88, CY = 88;
   let angle = -Math.PI / 2;
@@ -212,7 +218,7 @@ function DonutChart({ slices }: { slices: { label: string; value: number; color:
 
   return (
     <div className="flex flex-wrap items-center gap-6">
-      <svg viewBox="0 0 176 176" className="w-36 h-36 shrink-0">
+      <svg viewBox="0 0 176 176" style={{ width: size, height: size }} className="shrink-0">
         {slices.length === 1 ? (
           <>
             <circle cx={CX} cy={CY} r={R} fill={slices[0].color} />
@@ -460,10 +466,15 @@ export function AnalyticsClient({
         return byCategoryData.length > 0
           ? <HBarChart items={byCategoryData} />
           : empty("No expenses in this range");
-      case "inv_status":
+      case "inv_status": {
+        const donutSize = Math.max(
+          120,
+          Math.min(chartBoxSize.height - 40, chartBoxSize.width * 0.4, 480)
+        );
         return statusSlices.length > 0
-          ? <DonutChart slices={statusSlices} />
+          ? <DonutChart slices={statusSlices} size={donutSize} />
           : empty("No invoices in this range");
+      }
       default:
         return null;
     }
