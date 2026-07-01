@@ -13,6 +13,7 @@ import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCirc
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
 type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string; product_id?: string };
@@ -151,6 +152,7 @@ async function buildInvoicePdf(
   exchangeRate = 1,
   logoUrl?: string | null,
   signatureUrl?: string | null,
+  plan = "free",
 ) {
   const sym = currSym(currency);
   const rate = currency === "INR" ? 1 : exchangeRate;
@@ -325,6 +327,18 @@ async function buildInvoicePdf(
     doc.text(`* Amounts converted from INR at 1 INR = ${(1/rate).toFixed(4)} ${currency}`, 14, doc.internal.pageSize.getHeight() - 6);
   }
 
+  if (plan === "free") {
+    const pageH = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const totalPages = doc.getNumberOfPages();
+    for (let pg = 1; pg <= totalPages; pg++) {
+      doc.setPage(pg);
+      doc.setFontSize(7); doc.setTextColor(...gray); doc.setFont("helvetica", "normal");
+      doc.text("Created with FreelanceFlow", pageW - 14, pageH - 6, { align: "right" });
+    }
+    doc.setPage(totalPages);
+  }
+
   return doc;
 }
 
@@ -336,8 +350,9 @@ async function downloadInvoicePdf(
   exchangeRate = 1,
   logoUrl?: string | null,
   signatureUrl?: string | null,
+  plan = "free",
 ) {
-  const doc = await buildInvoicePdf(inv, accentHex, template, currency, exchangeRate, logoUrl, signatureUrl);
+  const doc = await buildInvoicePdf(inv, accentHex, template, currency, exchangeRate, logoUrl, signatureUrl, plan);
   doc.save(`${inv.invoice_number}.pdf`);
 }
 
@@ -455,6 +470,7 @@ function InvoicesPageInner() {
   const [irnTarget, setIrnTarget] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const planCtx = usePlan();
+  const { ownerId } = useWorkspace();
   const isPro = planCtx !== "free";
   const canSendEmail = planAtLeast(planCtx, "pro");
   const canUseTemplates = planAtLeast(planCtx, "basic");
@@ -517,15 +533,15 @@ function InvoicesPageInner() {
         bank_name: profile.bank_name || "",
       }));
     });
-    import("@/lib/supabase/client").then(({ createClient }) => {
-      const supabase = createClient();
-      supabase.auth.getUser().then(async ({ data: { user } }) => {
-        if (!user) return;
-        const { data } = await supabase.from("clients").select("*").eq("user_id", user.id).order("name");
-        setClients(data || []);
+    if (ownerId) {
+      import("@/lib/supabase/client").then(({ createClient }) => {
+        const supabase = createClient();
+        supabase.from("clients").select("*").eq("user_id", ownerId).order("name").then(({ data }) => {
+          setClients(data || []);
+        });
       });
-    });
-  }, [fetchInvoices]);
+    }
+  }, [fetchInvoices, ownerId]);
 
   function selectClient(id: string) {
     const c = clients.find(cl => cl.id === id);
@@ -555,6 +571,20 @@ function InvoicesPageInner() {
     setItems(u);
   }
 
+  async function saveDescriptionAsProduct(description: string, rate: number, hsn_code: string | undefined, applyId: (id: string) => void) {
+    if (!description.trim()) return;
+    const res = await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: description.trim(), type: "service", unit_price: rate, hsn_code: hsn_code || "" }),
+    });
+    const data = await res.json();
+    if (data.error) { toast.error(data.error); return; }
+    setProducts(p => [...p, data.product].sort((a, b) => a.name.localeCompare(b.name)));
+    applyId(data.product.id);
+    toast.success("Saved to your catalog");
+  }
+
   const subtotal = items.reduce((s, i) => s + i.quantity * i.rate, 0);
   const gstAmt = (subtotal * parseFloat(form.gst_rate || "0")) / 100;
   const total = subtotal + gstAmt;
@@ -569,15 +599,14 @@ function InvoicesPageInner() {
 
   async function bulkMarkPaid() {
     setBulkWorking(true);
-    await Promise.all([...bulkSelected].map(id => {
-      const inv = invoices.find(i => i.id === id);
-      return fetch("/api/invoices", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: "paid", amount_paid: inv?.total ?? null }),
-      });
-    }));
-    toast.success(`${bulkSelected.size} invoice(s) marked paid`);
+    const res = await fetch("/api/invoices/bulk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...bulkSelected] }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || "Failed to mark invoices paid");
+    else toast.success(`${data.updated} invoice(s) marked paid`);
     setBulkSelected(new Set());
     fetchInvoices();
     setBulkWorking(false);
@@ -586,10 +615,14 @@ function InvoicesPageInner() {
   async function bulkDelete() {
     if (!confirm(`Delete ${bulkSelected.size} invoice(s)? This cannot be undone.`)) return;
     setBulkWorking(true);
-    await Promise.all([...bulkSelected].map(id =>
-      fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
-    ));
-    toast.success(`${bulkSelected.size} invoice(s) deleted`);
+    const res = await fetch("/api/invoices/bulk", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...bulkSelected] }),
+    });
+    const data = await res.json();
+    if (!res.ok) toast.error(data.error || "Failed to delete invoices");
+    else toast.success(`${data.deleted} invoice(s) deleted${data.stock_warning ? " — " + data.stock_warning : ""}`);
     setBulkSelected(new Set());
     fetchInvoices();
     setBulkWorking(false);
@@ -716,9 +749,11 @@ function InvoicesPageInner() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       toast.success(`Invoice ${data.invoice.invoice_number} created!`);
+      if (data.stock_warning) toast.warning(data.stock_warning);
       setOpen(false);
       setItems([{ description: "", quantity: 1, rate: 0 }]);
       fetchInvoices();
+      fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create invoice");
     } finally { setSaving(false); }
@@ -726,9 +761,12 @@ function InvoicesPageInner() {
 
   async function deleteInvoice(id: string) {
     if (!confirm("Delete this invoice? This cannot be undone.")) return;
-    await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const res = await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const data = await res.json();
     toast.success("Invoice deleted");
+    if (data.stock_warning) toast.warning(data.stock_warning);
     fetchInvoices();
+    fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
   }
 
   async function markPaid(inv: Invoice) {
@@ -806,8 +844,10 @@ function InvoicesPageInner() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       toast.success("Invoice updated!");
+      if (data.stock_warning) toast.warning(data.stock_warning);
       setEditTarget(null);
       fetchInvoices();
+      fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update");
     } finally { setEditSaving(false); }
@@ -819,7 +859,7 @@ function InvoicesPageInner() {
     try {
       let pdfBase64: string | null = null;
       try {
-        const doc = await buildInvoicePdf(sendTarget, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature);
+        const doc = await buildInvoicePdf(sendTarget, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx);
         pdfBase64 = doc.output("datauristring");
       } catch { /* proceed without PDF if generation fails */ }
 
@@ -956,6 +996,15 @@ function InvoicesPageInner() {
                         <div className="col-span-1 flex justify-end"><button type="button" onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></div>
                       </div>
                       {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                      {!item.product_id && item.description.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => saveDescriptionAsProduct(item.description, item.rate, item.hsn_code, id => setItems(its => its.map((it, idx) => idx === i ? { ...it, product_id: id } : it)))}
+                          className="text-xs text-violet-600 hover:underline mt-0.5"
+                        >
+                          + Save &quot;{item.description}&quot; to catalog
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1199,7 +1248,7 @@ function InvoicesPageInner() {
                   </button>}
                   {inv.seller_gstin && <button onClick={() => setIrnTarget(inv)} className="text-gray-400 hover:text-violet-600" title="Generate E-Invoice JSON"><FileCode size={15} /></button>}
                   <button onClick={() => duplicateInvoice(inv)} className="text-gray-400 hover:text-violet-600" title="Duplicate invoice"><Copy size={15} /></button>
-                  <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
+                  <button onClick={() => downloadInvoicePdf(inv, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx)} className="text-gray-400 hover:text-violet-600" title="Download PDF"><Download size={16} /></button>
                   {inv.status === "unpaid" && <button onClick={() => markPaid(inv)} className="text-gray-400 hover:text-green-600" title="Mark as paid"><CheckCircle size={16} /></button>}
                   <button onClick={() => deleteInvoice(inv.id)} className="text-gray-400 hover:text-red-600" title="Delete"><Trash2 size={16} /></button>
                 </div>
@@ -1404,7 +1453,7 @@ function InvoicesPageInner() {
               <div>
                 <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase mb-1.5">Accent Color</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000"].map(c => (
+                  {["#7c3aed","#2563eb","#16a34a","#dc2626","#d97706","#0891b2","#db2777","#000000","#0d9488","#4f46e5","#475569","#e11d48"].map(c => (
                     <button key={c} onClick={() => setPdfColor(c)} className="w-6 h-6 rounded-full border-2 transition-all" style={{ backgroundColor: c, borderColor: pdfColor === c ? "#000" : "transparent" }} />
                   ))}
                   <label className="relative w-6 h-6 rounded-full border-2 border-gray-300 overflow-hidden cursor-pointer">
@@ -1416,7 +1465,7 @@ function InvoicesPageInner() {
               </div>
               {/* Action buttons */}
               <div className="flex gap-2">
-                <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
+                <Button onClick={() => downloadInvoicePdf(selected, pdfColor, pdfTemplate, currency, exchangeRate, profileLogo, profileSignature, planCtx)} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white gap-2">
                   <Download size={16} /> Download PDF
                 </Button>
                 {canSendEmail && <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
@@ -1492,6 +1541,15 @@ function InvoicesPageInner() {
                           <div className="col-span-1 flex justify-end"><button type="button" onClick={() => setEditItems(editItems.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
                         </div>
                         {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+                        {!item.product_id && item.description.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => saveDescriptionAsProduct(item.description, item.rate, item.hsn_code, id => setEditItems(its => its.map((it, idx) => idx === i ? { ...it, product_id: id } : it)))}
+                            className="text-xs text-violet-600 hover:underline mt-0.5"
+                          >
+                            + Save &quot;{item.description}&quot; to catalog
+                          </button>
+                        )}
                       </div>
                     );
                   })}

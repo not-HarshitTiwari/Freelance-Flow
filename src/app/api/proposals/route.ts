@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -9,10 +10,12 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("plan, full_name, business_name, business_address, email, phone, gstin, ai_proposals_count, ai_proposals_reset_at")
-    .eq("id", user.id)
+    .eq("id", ownerId)
     .single();
 
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
@@ -36,17 +39,18 @@ export async function POST(request: Request) {
     await supabase.from("profiles").update({
       ai_proposals_count: currentCount + 1,
       ai_proposals_reset_at: today.toISOString().slice(0, 10),
-    }).eq("id", user.id);
+    }).eq("id", ownerId);
   }
 
   const { projectDescription, clientName, clientEmail, clientCompany, budget, timeline } = await request.json();
 
-  // Build sender info — only include fields that are actually set
+  // Build sender info — only include fields that are actually set (uses owner's business identity)
+  const ownerEmail = profile.email || user.email;
   const senderName = profile.business_name || profile.full_name || user.email!.split("@")[0];
   const senderLines: string[] = [];
   if (profile.full_name) senderLines.push(`Name: ${profile.full_name}`);
   if (profile.business_name) senderLines.push(`Business: ${profile.business_name}`);
-  if (profile.email || user.email) senderLines.push(`Email: ${profile.email || user.email}`);
+  if (ownerEmail) senderLines.push(`Email: ${ownerEmail}`);
   if (profile.phone) senderLines.push(`Phone: ${profile.phone}`);
   if (profile.business_address) senderLines.push(`Address: ${profile.business_address}`);
   if (profile.gstin) senderLines.push(`GSTIN: ${profile.gstin}`);
@@ -99,7 +103,7 @@ STRICT RULE: Every name, email, phone, and company in your output must come dire
     const content = completion.choices[0]?.message?.content || "";
 
     const { data, error } = await supabase.from("proposals").insert({
-      user_id: user.id,
+      user_id: ownerId,
       title: `Proposal for ${clientName}${clientCompany ? ` (${clientCompany})` : ""}`,
       content,
       amount: budget ? parseFloat(budget) : null,
@@ -120,10 +124,12 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { data } = await supabase
     .from("proposals")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false });
 
   return NextResponse.json({ proposals: data });
@@ -134,6 +140,8 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { id, content, status } = await request.json();
   const update: Record<string, string> = {};
   if (content !== undefined) update.content = content;
@@ -143,7 +151,7 @@ export async function PATCH(request: Request) {
     .from("proposals")
     .update(update)
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .select()
     .single();
 
@@ -155,8 +163,9 @@ export async function DELETE(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { id } = await request.json();
-  const { error } = await supabase.from("proposals").delete().eq("id", id).eq("user_id", user.id);
+  const { error } = await supabase.from("proposals").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

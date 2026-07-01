@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Eye, EyeOff, Upload, X, Pen, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Upload, X, Pen, Trash2, Lock, UserPlus, UserX } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
+import { usePlan, planAtLeast } from "@/lib/plan-context";
 
 type PdfTemplate = "classic" | "minimal" | "bold";
 const PDF_TEMPLATES: { id: PdfTemplate; label: string }[] = [
@@ -54,13 +55,20 @@ function buildPreview(fmt: InvNumFmt): string {
   return parts.join(fmt.inv_separator || "-");
 }
 
+type TeamMember = { id: string; member_email: string; member_id: string | null; status: string; invited_at: string; accepted_at: string | null };
+
 export default function SettingsPage() {
+  const plan = usePlan();
+  const canSetCadence = planAtLeast(plan, "pro");
+  const canManageTeam = planAtLeast(plan, "advanced");
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
   const [pdfColor, setPdfColor] = useState<string>("#7c3aed");
   const [currency, setCurrency] = useState("INR");
+  const [reminderCadence, setReminderCadence] = useState(3);
+  const [savingCadence, setSavingCadence] = useState(false);
 
   // Invoice number format
   const [invFmt, setInvFmt] = useState<InvNumFmt>({
@@ -69,6 +77,11 @@ export default function SettingsPage() {
     inv_seq_digits: 4, inv_next_seq: 1,
   });
   const [savingInvFmt, setSavingInvFmt] = useState(false);
+
+  // Team state
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -107,6 +120,7 @@ export default function SettingsPage() {
         setLogoUrl(profile.logo_url || null);
         setSignatureUrl(profile.signature_url || null);
         setSignatureName(profile.signature_name || "");
+        setReminderCadence(profile.reminder_cadence_days ?? 3);
         setInvFmt({
           inv_prefix: profile.inv_prefix ?? "INV",
           inv_suffix: profile.inv_suffix ?? "",
@@ -120,6 +134,34 @@ export default function SettingsPage() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    fetch("/api/team").then(r => r.json()).then(({ members }) => { if (members) setTeamMembers(members); });
+  }, []);
+
+  async function inviteMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    try {
+      const res = await fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim() }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(`Invite sent to ${inviteEmail.trim()}`);
+      setInviteEmail("");
+      fetch("/api/team").then(r => r.json()).then(({ members }) => { if (members) setTeamMembers(members); });
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send invite"); }
+    finally { setInviting(false); }
+  }
+
+  async function removeMember(memberId: string) {
+    if (!confirm("Remove this team member?")) return;
+    const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId }) });
+    const data = await res.json();
+    if (!res.ok) { toast.error(data.error); return; }
+    toast.success("Member removed");
+    setTeamMembers(ms => ms.filter(m => m.id !== memberId));
+  }
 
   // ── Logo upload ───────────────────────────────────────────────
   async function uploadLogo(file: File) {
@@ -242,6 +284,15 @@ export default function SettingsPage() {
     const data = await res.json();
     if (data.error) toast.error(data.error); else toast.success("Invoice numbering saved!");
     setSavingInvFmt(false);
+  }
+
+  async function saveReminderCadence() {
+    if (!canSetCadence) return;
+    setSavingCadence(true);
+    const res = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reminder_cadence_days: reminderCadence }) });
+    const data = await res.json();
+    if (data.error) toast.error(data.error); else toast.success("Reminder cadence saved!");
+    setSavingCadence(false);
   }
 
   const f = form;
@@ -539,6 +590,100 @@ export default function SettingsPage() {
           <Button type="button" onClick={saveInvFmt} disabled={savingInvFmt} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
             {savingInvFmt ? "Saving..." : "Save Invoice Numbering"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Payment Reminder Cadence — Pro+ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base dark:text-white flex items-center gap-2">
+            Payment Reminder Cadence
+            {!canSetCadence && <Lock className="h-3.5 w-3.5 text-gray-400" />}
+          </CardTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            How often to re-send overdue payment reminder emails to clients.
+            {!canSetCadence && " Upgrade to Pro or higher to customize this."}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Remind every (days)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={reminderCadence}
+              disabled={!canSetCadence}
+              onChange={e => setReminderCadence(Math.max(1, parseInt(e.target.value) || 1))}
+              placeholder="3"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={saveReminderCadence}
+            disabled={!canSetCadence || savingCadence}
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50"
+          >
+            {savingCadence ? "Saving..." : canSetCadence ? "Save Reminder Cadence" : "Pro plan required"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Team Members — Advanced+ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base dark:text-white flex items-center gap-2">
+            Team Members
+            {!canManageTeam && <Lock className="h-3.5 w-3.5 text-gray-400" />}
+          </CardTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Invite collaborators to access your workspace.
+            {!canManageTeam && " Upgrade to Advanced to manage team members."}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {canManageTeam ? (
+            <>
+              <form onSubmit={inviteMember} className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="colleague@example.com"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  disabled={inviting}
+                  className="flex-1"
+                />
+                <Button type="submit" disabled={inviting || !inviteEmail.trim()} className="bg-violet-600 hover:bg-violet-700 text-white shrink-0">
+                  <UserPlus className="h-4 w-4 mr-1.5" />
+                  {inviting ? "Sending…" : "Invite"}
+                </Button>
+              </form>
+              {teamMembers.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">No team members yet. Invite someone above.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {teamMembers.map(m => (
+                    <li key={m.id} className="flex items-center justify-between py-2.5 gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{m.member_email}</p>
+                        <p className="text-xs text-gray-400 capitalize">{m.status}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+                        onClick={() => removeMember(m.id)}
+                      >
+                        <UserX className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-400 italic">Available on the Advanced plan.</p>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,14 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   // Email send requires Pro or Advanced
-  const { data: planProfile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  const { data: planProfile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   if (!["pro", "advanced"].includes(planProfile?.plan || "")) {
     return NextResponse.json({ error: "Email sending requires a Pro or Advanced plan." }, { status: 403 });
   }
@@ -23,16 +26,16 @@ export async function POST(request: Request) {
     .from("proposals")
     .select("*")
     .eq("id", proposalId)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .single();
 
   if (pErr || !proposal) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
 
-  // Get profile with SMTP credentials
+  // Get profile with SMTP credentials (owner's SMTP creds)
   const { data: profile } = await supabase
     .from("profiles")
     .select("smtp_email, smtp_password, full_name, business_name")
-    .eq("id", user.id)
+    .eq("id", ownerId)
     .single();
 
   if (!profile?.smtp_email || !profile?.smtp_password) {

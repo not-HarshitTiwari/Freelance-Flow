@@ -20,17 +20,24 @@ type Expense = {
   date: string;
   notes: string | null;
   receipt_url: string | null;
+  is_recurring: boolean;
+  recurrence_interval: string | null;
+  next_expense_date: string | null;
 };
 
 const CATEGORIES = ["Software", "Hardware", "Marketing", "Travel", "Office", "Freelancer", "Tax", "Other"];
 
-const empty = { title: "", amount: "", category: "Software", date: new Date().toISOString().slice(0, 10), notes: "", receipt_url: "" };
+const empty = {
+  title: "", amount: "", category: "Software", date: new Date().toISOString().slice(0, 10), notes: "", receipt_url: "",
+  is_recurring: false, recurrence_interval: "monthly", next_expense_date: "",
+};
 
 export default function ExpensesPage() {
   const plan = usePlan();
   const isPro = plan !== "free";
   const canUploadReceipt = planAtLeast(plan, "basic");
   const canExportCSV = planAtLeast(plan, "basic");
+  const canRecur = planAtLeast(plan, "pro");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
@@ -78,7 +85,10 @@ export default function ExpensesPage() {
 
   function openEdit(e: Expense) {
     setEditing(e);
-    setForm({ title: e.title, amount: String(e.amount), category: e.category, date: e.date, notes: e.notes || "", receipt_url: e.receipt_url || "" });
+    setForm({
+      title: e.title, amount: String(e.amount), category: e.category, date: e.date, notes: e.notes || "", receipt_url: e.receipt_url || "",
+      is_recurring: e.is_recurring || false, recurrence_interval: e.recurrence_interval || "monthly", next_expense_date: e.next_expense_date || "",
+    });
     setOpen(true);
   }
 
@@ -164,6 +174,40 @@ export default function ExpensesPage() {
                 <Label>Notes</Label>
                 <Input placeholder="Optional note" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
               </div>
+              {canRecur ? (
+                <div className="space-y-2 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.is_recurring}
+                      onChange={e => setForm({ ...form, is_recurring: e.target.checked })}
+                      className="rounded border-gray-300"
+                    />
+                    Make this a recurring expense
+                  </label>
+                  {form.is_recurring && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Repeats</Label>
+                        <select value={form.recurrence_interval} onChange={e => setForm({ ...form, recurrence_interval: e.target.value })} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Next date</Label>
+                        <Input type="date" value={form.next_expense_date} onChange={e => setForm({ ...form, next_expense_date: e.target.value })} required={form.is_recurring} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Recurring expenses are available on the Pro plan and above.
+                </p>
+              )}
               {canUploadReceipt && (
               <div className="space-y-1.5">
                 <Label>Receipt</Label>
@@ -253,7 +297,14 @@ export default function ExpensesPage() {
                       <IndianRupee size={15} className="text-red-500" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{e.title}</p>
+                      <p className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
+                        {e.title}
+                        {e.is_recurring && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">
+                            Recurring
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                         {e.category} • {new Date(e.date).toLocaleDateString("en-IN")}
                         {e.notes && ` • ${e.notes}`}

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceOwnerId } from "@/lib/team";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Receipt, Users, IndianRupee, TrendingUp, Clock, FileSignature } from "lucide-react";
 import Link from "next/link";
@@ -9,18 +10,19 @@ import { RevenueChart } from "@/components/dashboard/RevenueChart";
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const ownerId = await getWorkspaceOwnerId(supabase, user!.id);
 
   type InvRow = { total: number; status: string; invoice_date: string; created_at: string; customer_name: string | null; customer_company: string | null; amount_paid: number | null };
   type ExpRow = { amount: number; date: string };
 
   const [{ count: proposalCount }, { count: clientCount }, { data: rawInvoices }, { data: profile }, { data: rawExpenses }, { count: invoiceCount }] =
     await Promise.all([
-      supabase.from("proposals").select("*", { count: "exact", head: true }).eq("user_id", user!.id),
-      supabase.from("clients").select("*", { count: "exact", head: true }).eq("user_id", user!.id),
-      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid").eq("user_id", user!.id),
-      supabase.from("profiles").select("plan, full_name, business_name, logo_url, signature_url, gstin").eq("id", user!.id).single(),
-      supabase.from("expenses").select("amount, date").eq("user_id", user!.id),
-      supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", user!.id),
+      supabase.from("proposals").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
+      supabase.from("clients").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
+      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid").eq("user_id", ownerId),
+      supabase.from("profiles").select("plan, full_name, business_name, logo_url, signature_url, gstin").eq("id", ownerId).single(),
+      supabase.from("expenses").select("amount, date").eq("user_id", ownerId),
+      supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
     ]);
 
   const invoices = (rawInvoices ?? []) as InvRow[];

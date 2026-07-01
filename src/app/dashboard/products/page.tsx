@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Package, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Pencil, Package, AlertTriangle, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 type Product = {
@@ -19,11 +19,12 @@ type Product = {
   hsn_code: string | null;
   track_inventory: boolean;
   quantity: number | null;
+  low_stock_threshold: number | null;
 };
 
 const empty = {
   name: "", description: "", type: "service" as "product" | "service",
-  unit_price: "", unit: "unit", hsn_code: "", track_inventory: false, quantity: "",
+  unit_price: "", unit: "unit", hsn_code: "", track_inventory: false, quantity: "", low_stock_threshold: "3",
 };
 
 export default function ProductsPage() {
@@ -32,6 +33,8 @@ export default function ProductsPage() {
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async () => {
     const res = await fetch("/api/products");
@@ -77,8 +80,97 @@ export default function ProductsPage() {
       name: p.name, description: p.description || "", type: p.type,
       unit_price: String(p.unit_price), unit: p.unit || "unit", hsn_code: p.hsn_code || "",
       track_inventory: p.track_inventory, quantity: p.quantity != null ? String(p.quantity) : "",
+      low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : "3",
     });
     setOpen(true);
+  }
+
+  function exportCSV() {
+    const rows = [["Name", "Type", "Price", "Unit", "HSN/SAC", "Description", "Track Inventory", "Quantity"]];
+    for (const p of products) {
+      rows.push([
+        p.name, p.type, String(p.unit_price), p.unit || "", p.hsn_code || "", p.description || "",
+        p.track_inventory ? "yes" : "no", p.quantity != null ? String(p.quantity) : "",
+      ]);
+    }
+    const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "products.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCSV(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else if (c === '"') inQuotes = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field); field = "";
+        if (row.some(f => f.trim() !== "")) rows.push(row);
+        row = [];
+      } else field += c;
+    }
+    if (field !== "" || row.length) { row.push(field); if (row.some(f => f.trim() !== "")) rows.push(row); }
+    return rows;
+  }
+
+  async function importCSV(file: File) {
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (!rows.length) throw new Error("CSV file is empty");
+
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const dataRows = rows.slice(1);
+      const idx = (name: string) => header.indexOf(name);
+
+      let imported = 0;
+      let failed = 0;
+      for (const r of dataRows) {
+        const name = r[idx("name")]?.trim();
+        if (!name) { failed++; continue; }
+        const type = r[idx("type")]?.trim().toLowerCase() === "product" ? "product" : "service";
+        const track = ["yes", "true", "1"].includes((r[idx("track inventory")] || "").trim().toLowerCase());
+        const qty = r[idx("quantity")]?.trim();
+
+        const res = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            type,
+            unit_price: parseFloat(r[idx("price")]) || 0,
+            unit: r[idx("unit")]?.trim() || "unit",
+            hsn_code: r[idx("hsn/sac")]?.trim() || "",
+            description: r[idx("description")]?.trim() || "",
+            track_inventory: track,
+            quantity: qty || "",
+          }),
+        });
+        const data = await res.json();
+        if (data.error) failed++; else imported++;
+      }
+
+      toast.success(`Imported ${imported} item${imported === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}`);
+      fetchProducts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   return (
@@ -88,6 +180,26 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Products & Services</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Your catalog — pick items straight onto an invoice instead of retyping them</p>
         </div>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) importCSV(f); }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Upload size={15} /> {importing ? "Importing..." : "Import CSV"}
+          </button>
+          {products.length > 0 && (
+            <button onClick={exportCSV} className="inline-flex items-center gap-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium px-3 h-8 rounded-lg transition-colors">
+              <Download size={15} /> Export CSV
+            </button>
+          )}
         <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { setEditing(null); setForm(empty); } }}>
           <DialogTrigger className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 h-8 rounded-lg transition-colors">
             <Plus size={16} /> Add Item
@@ -138,9 +250,15 @@ export default function ProductsPage() {
                     Track stock for this product
                   </label>
                   {form.track_inventory && (
-                    <div className="space-y-1.5">
-                      <Label>Quantity in stock</Label>
-                      <Input type="number" min="0" step="1" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Quantity in stock</Label>
+                        <Input type="number" min="0" step="1" placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Low-stock alert at</Label>
+                        <Input type="number" min="0" step="1" placeholder="3" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -151,6 +269,7 @@ export default function ProductsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {products.length === 0 ? (
@@ -163,6 +282,7 @@ export default function ProductsPage() {
         <div className="space-y-2">
           {products.map(p => {
             const outOfStock = p.track_inventory && (p.quantity ?? 0) <= 0;
+            const lowStock = p.track_inventory && !outOfStock && (p.quantity ?? 0) <= (p.low_stock_threshold ?? 3);
             return (
               <Card key={p.id}>
                 <CardContent className="p-4 flex items-center justify-between">
@@ -175,9 +295,9 @@ export default function ProductsPage() {
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
                         {p.type === "product" ? "Product" : "Service"} • ₹{p.unit_price.toLocaleString("en-IN")}/{p.unit || "unit"}
                         {p.track_inventory && (
-                          <span className={outOfStock ? "text-red-500 flex items-center gap-1" : ""}>
-                            {outOfStock && <AlertTriangle size={11} />}
-                            • {outOfStock ? "Out of stock" : `${p.quantity} in stock`}
+                          <span className={outOfStock || lowStock ? "text-red-500 flex items-center gap-1" : ""}>
+                            {(outOfStock || lowStock) && <AlertTriangle size={11} />}
+                            • {outOfStock ? "Out of stock" : lowStock ? `Low stock — ${p.quantity} left` : `${p.quantity} in stock`}
                           </span>
                         )}
                       </p>

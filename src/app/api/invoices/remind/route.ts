@@ -1,17 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { invoiceId } = await request.json();
 
   const [{ data: invoice }, { data: profile }] = await Promise.all([
-    supabase.from("invoices").select("*").eq("id", invoiceId).eq("user_id", user.id).single(),
-    supabase.from("profiles").select("smtp_email, smtp_password, full_name, business_name").eq("id", user.id).single(),
+    supabase.from("invoices").select("*").eq("id", invoiceId).eq("user_id", ownerId).single(),
+    supabase.from("profiles").select("smtp_email, smtp_password, full_name, business_name").eq("id", ownerId).single(),
   ]);
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
