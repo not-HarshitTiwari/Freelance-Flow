@@ -13,7 +13,17 @@ import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search 
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
-type QuoteItem = { description: string; quantity: number; rate: number };
+type QuoteItem = { description: string; quantity: number; rate: number; product_id?: string };
+
+type Product = {
+  id: string;
+  name: string;
+  unit_price: number;
+  hsn_code: string | null;
+  type: "product" | "service";
+  track_inventory: boolean;
+  quantity: number | null;
+};
 
 type Quote = {
   id: string;
@@ -53,44 +63,102 @@ const statusColors: Record<string, string> = {
 
 const emptyItem: QuoteItem = { description: "", quantity: 1, rate: 0 };
 
-function ItemRows({ rows, onChange, onAdd, onRemove }: {
+function getStockWarning(item: QuoteItem, products: Product[]): string | null {
+  if (!item.product_id) return null;
+  const p = products.find(pr => pr.id === item.product_id);
+  if (!p || !p.track_inventory) return null;
+  const available = p.quantity ?? 0;
+  if (item.quantity > available) return available <= 0 ? "Out of stock" : `Only ${available} in stock`;
+  return null;
+}
+
+function ProductPicker({ value, products, onChangeText, onSelect }: {
+  value: string;
+  products: Product[];
+  onChangeText: (text: string) => void;
+  onSelect: (p: Product) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const filtered = (value.trim()
+    ? products.filter(p => p.name.toLowerCase().includes(value.toLowerCase()))
+    : products
+  ).slice(0, 6);
+
+  return (
+    <div className="relative flex-1">
+      <Input
+        placeholder="Description"
+        value={value}
+        onChange={e => { onChangeText(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+          {filtered.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onSelect(p); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-between gap-2"
+            >
+              <span className="truncate text-gray-900 dark:text-gray-100">{p.name}</span>
+              <span className="text-xs text-gray-400 shrink-0">₹{p.unit_price.toLocaleString("en-IN")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ItemRows({ rows, products, onChange, onSelectProduct, onAdd, onRemove }: {
   rows: QuoteItem[];
+  products: Product[];
   onChange: (i: number, field: keyof QuoteItem, value: string | number) => void;
+  onSelectProduct: (i: number, p: Product) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
 }) {
   return (
     <div className="space-y-2">
       <Label>Items</Label>
-      {rows.map((item, i) => (
-        <div key={i} className="flex gap-2 items-start">
-          <Input
-            placeholder="Description"
-            value={item.description}
-            onChange={e => onChange(i, "description", e.target.value)}
-            className="flex-1"
-          />
-          <Input
-            type="number"
-            placeholder="Qty"
-            value={item.quantity}
-            onChange={e => onChange(i, "quantity", Number(e.target.value))}
-            className="w-20"
-          />
-          <Input
-            type="number"
-            placeholder="Rate"
-            value={item.rate}
-            onChange={e => onChange(i, "rate", Number(e.target.value))}
-            className="w-24"
-          />
-          {rows.length > 1 && (
-            <button type="button" onClick={() => onRemove(i)} className="text-gray-400 hover:text-red-500 mt-2">
-              <Trash2 size={15} />
-            </button>
-          )}
-        </div>
-      ))}
+      {rows.map((item, i) => {
+        const stockWarning = getStockWarning(item, products);
+        return (
+          <div key={i}>
+            <div className="flex gap-2 items-start">
+              <ProductPicker
+                value={item.description}
+                products={products}
+                onChangeText={v => onChange(i, "description", v)}
+                onSelect={p => onSelectProduct(i, p)}
+              />
+              <Input
+                type="number"
+                placeholder="Qty"
+                value={item.quantity}
+                onChange={e => onChange(i, "quantity", Number(e.target.value))}
+                className="w-20"
+              />
+              <Input
+                type="number"
+                placeholder="Rate"
+                value={item.rate}
+                onChange={e => onChange(i, "rate", Number(e.target.value))}
+                className="w-24"
+              />
+              {rows.length > 1 && (
+                <button type="button" onClick={() => onRemove(i)} className="text-gray-400 hover:text-red-500 mt-2">
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </div>
+            {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
+          </div>
+        );
+      })}
       <Button type="button" variant="outline" size="sm" onClick={onAdd} className="gap-1">
         <Plus size={14} /> Add Item
       </Button>
@@ -102,6 +170,7 @@ export default function QuotesPage() {
   const { ownerId } = useWorkspace();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [saving, setSaving] = useState(false);
@@ -135,6 +204,7 @@ export default function QuotesPage() {
     supabase.from("clients").select("id, name, email, company, address").eq("user_id", ownerId).order("name").then(({ data: clientData }) => {
       setClients(clientData || []);
     });
+    fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
   }, [fetchQuotes, ownerId]);
 
   function resetForm() {
@@ -165,7 +235,15 @@ export default function QuotesPage() {
   }
 
   function updateItem(i: number, field: keyof QuoteItem, value: string | number) {
-    setItems(its => its.map((it, idx) => idx === i ? { ...it, [field]: value } : it));
+    setItems(its => its.map((it, idx) =>
+      idx === i ? { ...it, [field]: value, ...(field === "description" ? { product_id: undefined } : {}) } : it
+    ));
+  }
+
+  function pickProduct(i: number, p: Product) {
+    setItems(its => its.map((it, idx) =>
+      idx === i ? { ...it, description: p.name, rate: p.unit_price, product_id: p.id } : it
+    ));
   }
 
   function addItem() { setItems(its => [...its, { ...emptyItem }]); }
@@ -318,7 +396,7 @@ export default function QuotesPage() {
               </div>
               <div className="space-y-2"><Label>Company</Label><Input value={customerCompany} onChange={e => setCustomerCompany(e.target.value)} /></div>
 
-              <ItemRows rows={items} onChange={updateItem} onAdd={addItem} onRemove={removeItem} />
+              <ItemRows rows={items} products={products} onChange={updateItem} onSelectProduct={pickProduct} onAdd={addItem} onRemove={removeItem} />
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
@@ -429,7 +507,7 @@ export default function QuotesPage() {
             </div>
             <div className="space-y-2"><Label>Company</Label><Input value={customerCompany} onChange={e => setCustomerCompany(e.target.value)} /></div>
 
-            <ItemRows rows={items} onChange={updateItem} onAdd={addItem} onRemove={removeItem} />
+            <ItemRows rows={items} products={products} onChange={updateItem} onSelectProduct={pickProduct} onAdd={addItem} onRemove={removeItem} />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
