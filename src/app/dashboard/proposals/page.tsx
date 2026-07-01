@@ -14,6 +14,7 @@ import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2, Sea
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
 type Proposal = {
@@ -53,6 +54,7 @@ export default function ProposalsPage() {
   const [sendName, setSendName] = useState("");
   const [sending, setSending] = useState(false);
   const planCtx = usePlan();
+  const { ownerId } = useWorkspace();
   const canSendEmail = planAtLeast(planCtx, "pro");
   const [isPro, setIsPro] = useState(false);
   const [rewardedOpen, setRewardedOpen] = useState(false);
@@ -79,13 +81,13 @@ export default function ProposalsPage() {
   }, []);
 
   useEffect(() => {
+    if (!ownerId) return;
     fetchProposals();
     const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return;
+    (async () => {
       const [{ data: profile }, { data: clientData }] = await Promise.all([
-        supabase.from("profiles").select("plan, ai_proposals_count, ai_proposals_reset_at").eq("id", user.id).single(),
-        supabase.from("clients").select("id, name, email, company").eq("user_id", user.id).order("name"),
+        supabase.from("profiles").select("plan, ai_proposals_count, ai_proposals_reset_at").eq("id", ownerId).single(),
+        supabase.from("clients").select("id, name, email, company").eq("user_id", ownerId).order("name"),
       ]);
       setIsPro((profile?.plan !== "free" && !!profile?.plan) || planAtLeast(planCtx, "basic"));
       setClients(clientData || []);
@@ -102,8 +104,8 @@ export default function ProposalsPage() {
         const isNewMonth = !resetAt || resetAt.getFullYear() !== now.getFullYear() || resetAt.getMonth() !== now.getMonth();
         setAiUsage({ used: isNewMonth ? 0 : (profile?.ai_proposals_count ?? 0), cap });
       }
-    });
-  }, [fetchProposals]);
+    })();
+  }, [fetchProposals, ownerId]);
 
   function pickClient(id: string) {
     setSelectedClientId(id);

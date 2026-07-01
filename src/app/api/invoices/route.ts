@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
 import { calculateGst } from "@/lib/gst";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 const STOCK_WARNING = "Invoice saved, but some stock counts couldn't be updated automatically.";
 
@@ -10,6 +11,8 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
   const body = await request.json();
   const {
@@ -23,12 +26,12 @@ export async function POST(request: Request) {
 
   const { subtotal, totalGst, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
 
-  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   const plan = profile?.plan || "free";
 
   // Free plan: max 5 invoices total
   if (plan === "free") {
-    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", user.id);
+    const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", ownerId);
     if ((count ?? 0) >= 5) {
       return NextResponse.json({ error: "Free plan limit reached. Upgrade to Basic or higher to create unlimited invoices." }, { status: 403 });
     }
@@ -37,10 +40,10 @@ export async function POST(request: Request) {
   // Recurring invoices require Pro or higher
   const wantsRecurring = !!is_recurring && ["pro", "advanced"].includes(plan);
 
-  const invoiceNumber = await generateInvoiceNumber(supabase, user.id);
+  const invoiceNumber = await generateInvoiceNumber(supabase, ownerId);
 
   const { data, error } = await supabase.from("invoices").insert({
-    user_id: user.id,
+    user_id: ownerId,
     invoice_number: invoiceNumber,
     invoice_date: invoice_date || new Date().toISOString().split("T")[0],
     items,
@@ -81,10 +84,12 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { data } = await supabase
     .from("invoices")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false });
 
   return NextResponse.json({ invoices: data });
@@ -94,6 +99,8 @@ export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
   const body = await request.json();
   const {
@@ -109,7 +116,7 @@ export async function PATCH(request: Request) {
   } = body;
 
   if (is_recurring) {
-    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
     if (!profile?.plan || !["pro", "advanced"].includes(profile.plan)) {
       return NextResponse.json({ error: "Recurring invoices require a Pro plan or higher." }, { status: 403 });
     }
@@ -117,7 +124,7 @@ export async function PATCH(request: Request) {
 
   let previousItems: StockItem[] | undefined;
   if (items !== undefined) {
-    const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", user.id).single();
+    const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", ownerId).single();
     previousItems = existing?.items as StockItem[] | undefined;
   }
 
@@ -140,7 +147,7 @@ export async function PATCH(request: Request) {
     .from("invoices")
     .update(updates)
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .select()
     .single();
 
@@ -161,11 +168,13 @@ export async function DELETE(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { id } = await request.json();
 
-  const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", user.id).single();
+  const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", ownerId).single();
 
-  const { error } = await supabase.from("invoices").delete().eq("id", id).eq("user_id", user.id);
+  const { error } = await supabase.from("invoices").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const stockErrors = await applyStockChange(supabase, existing?.items as StockItem[] | undefined, -1);

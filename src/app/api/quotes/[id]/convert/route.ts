@@ -2,19 +2,21 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { id } = await params;
 
   const { data: quote, error: fetchError } = await supabase
     .from("quotes")
     .select("*")
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .single();
 
   if (fetchError || !quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
@@ -22,10 +24,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Quote already converted to an invoice" }, { status: 409 });
   }
 
-  const invoiceNumber = await generateInvoiceNumber(supabase, user.id);
+  const invoiceNumber = await generateInvoiceNumber(supabase, ownerId);
 
   const { data: invoice, error: invoiceError } = await supabase.from("invoices").insert({
-    user_id: user.id,
+    user_id: ownerId,
     client_id: quote.client_id,
     invoice_number: invoiceNumber,
     invoice_date: new Date().toISOString().split("T")[0],
@@ -51,7 +53,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .from("quotes")
     .update({ status: "converted", converted_invoice_id: invoice.id })
     .eq("id", id)
-    .eq("user_id", user.id);
+    .eq("user_id", ownerId);
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 

@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { invoiceId, amount, note } = await request.json();
   if (!amount || amount <= 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
 
@@ -13,7 +15,7 @@ export async function POST(request: Request) {
     .from("invoices")
     .select("total, amount_paid, status, payment_note")
     .eq("id", invoiceId)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .single();
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
       payment_note: updatedNote,
     })
     .eq("id", invoiceId)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .select()
     .single();
 

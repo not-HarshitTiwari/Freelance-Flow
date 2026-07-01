@@ -4,6 +4,7 @@ import Sidebar from "@/components/dashboard/Sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { PlanProvider } from "@/components/dashboard/PlanProvider";
 import { DashboardAdBanner } from "@/components/ads/DashboardAdBanner";
+import { getWorkspaceOwnerId } from "@/lib/team";
 import type { Plan } from "@/lib/plan-context";
 
 export default async function DashboardLayout({
@@ -15,16 +16,19 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const isOwner = ownerId === user.id;
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("plan")
-    .eq("id", user.id)
+    .eq("id", ownerId)
     .single();
 
   const plan = (profile?.plan as Plan) || "free";
 
   return (
-    <PlanProvider plan={plan}>
+    <PlanProvider plan={plan} ownerId={ownerId} isOwner={isOwner}>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
         <Sidebar user={user} plan={plan} />
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950">

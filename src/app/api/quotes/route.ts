@@ -2,11 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateQuoteNumber } from "@/lib/quote-number";
 import { calculateGst } from "@/lib/gst";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
   const body = await request.json();
   const {
@@ -16,10 +19,10 @@ export async function POST(request: Request) {
   } = body;
 
   const { subtotal, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
-  const quoteNumber = await generateQuoteNumber(supabase, user.id);
+  const quoteNumber = await generateQuoteNumber(supabase, ownerId);
 
   const { data, error } = await supabase.from("quotes").insert({
-    user_id: user.id,
+    user_id: ownerId,
     client_id: client_id || null,
     quote_number: quoteNumber,
     items,
@@ -45,10 +48,12 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { data } = await supabase
     .from("quotes")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false });
 
   return NextResponse.json({ quotes: data });
@@ -58,6 +63,8 @@ export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
   const body = await request.json();
   const {
@@ -86,7 +93,7 @@ export async function PATCH(request: Request) {
     .from("quotes")
     .update(updates)
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .select()
     .single();
 
@@ -98,9 +105,10 @@ export async function DELETE(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { id } = await request.json();
 
-  const { error } = await supabase.from("quotes").delete().eq("id", id).eq("user_id", user.id);
+  const { error } = await supabase.from("quotes").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });

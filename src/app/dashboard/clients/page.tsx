@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { useWorkspace } from "@/lib/workspace-context";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
 
 export default function ClientsPage() {
   const plan = usePlan();
+  const { ownerId } = useWorkspace();
   const isPro = plan !== "free";
   const canBulkImport = planAtLeast(plan, "basic");
   const [clients, setClients] = useState<Client[]>([]);
@@ -41,15 +43,14 @@ export default function ClientsPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const fetchClients = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!ownerId) return;
     const { data } = await supabase
       .from("clients")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", ownerId)
       .order("created_at", { ascending: false });
     setClients(data || []);
-  }, [supabase]);
+  }, [supabase, ownerId]);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
@@ -60,12 +61,11 @@ export default function ClientsPage() {
   }
 
   async function deleteClient(id: string, name: string, email: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!ownerId) return;
     const { count } = await supabase
       .from("invoices")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", ownerId)
       .or(`customer_name.eq.${name},customer_email.eq.${email}`);
     const msg = count && count > 0
       ? `This client has ${count} invoice(s) linked. Deleting the client won't delete those invoices. Continue?`
@@ -83,10 +83,9 @@ export default function ClientsPage() {
       return;
     }
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!ownerId) return;
     const { error } = await supabase.from("clients").insert({
-      user_id: user.id,
+      user_id: ownerId,
       name: form.name,
       email: form.email,
       phone: form.phone || null,
@@ -153,8 +152,7 @@ export default function ClientsPage() {
     if (!canBulkImport) { toast.error("Bulk CSV import requires Basic plan or higher."); return; }
     setImporting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!ownerId) return;
 
       const text = await file.text();
       const rows = parseCSV(text);
@@ -166,7 +164,7 @@ export default function ClientsPage() {
 
       const toInsert = dataRows
         .map(r => ({
-          user_id: user.id,
+          user_id: ownerId,
           name: r[idx("name")]?.trim() || "",
           email: r[idx("email")]?.trim() || "",
           phone: r[idx("phone")]?.trim() || null,

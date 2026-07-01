@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search } from "lucide-react";
+import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
 type QuoteItem = { description: string; quantity: number; rate: number };
@@ -98,6 +99,7 @@ function ItemRows({ rows, onChange, onAdd, onRemove }: {
 }
 
 export default function QuotesPage() {
+  const { ownerId } = useWorkspace();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
@@ -127,18 +129,13 @@ export default function QuotesPage() {
   }, []);
 
   useEffect(() => {
+    if (!ownerId) return;
     fetchQuotes();
     const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return;
-      const { data: clientData } = await supabase
-        .from("clients")
-        .select("id, name, email, company, address")
-        .eq("user_id", user.id)
-        .order("name");
+    supabase.from("clients").select("id, name, email, company, address").eq("user_id", ownerId).order("name").then(({ data: clientData }) => {
       setClients(clientData || []);
     });
-  }, [fetchQuotes]);
+  }, [fetchQuotes, ownerId]);
 
   function resetForm() {
     setSelectedClientId("");

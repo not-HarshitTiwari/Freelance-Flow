@@ -1,15 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { invoiceId } = await request.json();
 
-  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   if (!profile?.plan || !["pro", "advanced"].includes(profile.plan)) {
     return NextResponse.json({ error: "Razorpay payment links require a Pro or Advanced plan." }, { status: 403 });
   }
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
     .from("invoices")
     .select("id, total, amount_paid, invoice_number, customer_name, customer_email, payment_link, payment_link_id")
     .eq("id", invoiceId)
-    .eq("user_id", user.id)
+    .eq("user_id", ownerId)
     .single();
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 // POST — generate portal token for a client, optionally email the link
 export async function POST(req: Request) {
@@ -9,11 +10,12 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { clientId, sendEmail: doEmail } = await req.json();
   const token = randomBytes(32).toString("hex");
 
   const { error } = await supabase.from("client_portals").upsert(
-    { user_id: user.id, client_id: clientId, token },
+    { user_id: ownerId, client_id: clientId, token },
     { onConflict: "client_id" }
   );
 
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
   if (doEmail) {
     const [{ data: client }, { data: profile }] = await Promise.all([
       supabase.from("clients").select("name, email").eq("id", clientId).single(),
-      supabase.from("profiles").select("smtp_email, smtp_password, business_name, full_name").eq("id", user.id).single(),
+      supabase.from("profiles").select("smtp_email, smtp_password, business_name, full_name").eq("id", ownerId).single(),
     ]);
     if (client?.email && profile?.smtp_email && profile?.smtp_password) {
       try {

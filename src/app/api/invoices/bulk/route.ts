@@ -2,12 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { applyStockChange, type StockItem } from "@/lib/stock";
 import { planAtLeast, type Plan } from "@/lib/plan-context";
+import { getWorkspaceOwnerId } from "@/lib/team";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STOCK_WARNING = "Invoices deleted, but some stock counts couldn't be restored automatically.";
 
-async function requireAdvanced(supabase: SupabaseClient, userId: string) {
-  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", userId).single();
+async function requireAdvanced(supabase: SupabaseClient, ownerId: string) {
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   const plan = (profile?.plan || "free") as Plan;
   return planAtLeast(plan, "advanced");
 }
@@ -17,18 +18,20 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!(await requireAdvanced(supabase, user.id))) {
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
+  if (!(await requireAdvanced(supabase, ownerId))) {
     return NextResponse.json({ error: "Bulk actions require the Advanced plan." }, { status: 403 });
   }
 
   const { ids } = await request.json();
   if (!Array.isArray(ids) || !ids.length) return NextResponse.json({ error: "No invoices selected" }, { status: 400 });
 
-  const { data: targets } = await supabase.from("invoices").select("id, total").eq("user_id", user.id).in("id", ids);
+  const { data: targets } = await supabase.from("invoices").select("id, total").eq("user_id", ownerId).in("id", ids);
   if (!targets?.length) return NextResponse.json({ error: "No matching invoices" }, { status: 404 });
 
   for (const inv of targets) {
-    await supabase.from("invoices").update({ status: "paid", amount_paid: inv.total }).eq("id", inv.id).eq("user_id", user.id);
+    await supabase.from("invoices").update({ status: "paid", amount_paid: inv.total }).eq("id", inv.id).eq("user_id", ownerId);
   }
 
   return NextResponse.json({ updated: targets.length });
@@ -39,17 +42,19 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!(await requireAdvanced(supabase, user.id))) {
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
+  if (!(await requireAdvanced(supabase, ownerId))) {
     return NextResponse.json({ error: "Bulk actions require the Advanced plan." }, { status: 403 });
   }
 
   const { ids } = await request.json();
   if (!Array.isArray(ids) || !ids.length) return NextResponse.json({ error: "No invoices selected" }, { status: 400 });
 
-  const { data: targets } = await supabase.from("invoices").select("id, items").eq("user_id", user.id).in("id", ids);
+  const { data: targets } = await supabase.from("invoices").select("id, items").eq("user_id", ownerId).in("id", ids);
   if (!targets?.length) return NextResponse.json({ error: "No matching invoices" }, { status: 404 });
 
-  const { error } = await supabase.from("invoices").delete().eq("user_id", user.id).in("id", targets.map(t => t.id));
+  const { error } = await supabase.from("invoices").delete().eq("user_id", ownerId).in("id", targets.map(t => t.id));
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   let stockErrors: { product_id: string; message: string }[] = [];

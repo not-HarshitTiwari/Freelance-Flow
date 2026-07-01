@@ -13,6 +13,7 @@ import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCirc
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
 type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string; product_id?: string };
@@ -469,6 +470,7 @@ function InvoicesPageInner() {
   const [irnTarget, setIrnTarget] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const planCtx = usePlan();
+  const { ownerId } = useWorkspace();
   const isPro = planCtx !== "free";
   const canSendEmail = planAtLeast(planCtx, "pro");
   const canUseTemplates = planAtLeast(planCtx, "basic");
@@ -531,15 +533,15 @@ function InvoicesPageInner() {
         bank_name: profile.bank_name || "",
       }));
     });
-    import("@/lib/supabase/client").then(({ createClient }) => {
-      const supabase = createClient();
-      supabase.auth.getUser().then(async ({ data: { user } }) => {
-        if (!user) return;
-        const { data } = await supabase.from("clients").select("*").eq("user_id", user.id).order("name");
-        setClients(data || []);
+    if (ownerId) {
+      import("@/lib/supabase/client").then(({ createClient }) => {
+        const supabase = createClient();
+        supabase.from("clients").select("*").eq("user_id", ownerId).order("name").then(({ data }) => {
+          setClients(data || []);
+        });
       });
-    });
-  }, [fetchInvoices]);
+    }
+  }, [fetchInvoices, ownerId]);
 
   function selectClient(id: string) {
     const c = clients.find(cl => cl.id === id);

@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getWorkspaceOwnerId } from "@/lib/team";
 
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { data } = await supabase.from("contracts").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const { data } = await supabase.from("contracts").select("*").eq("user_id", ownerId).order("created_at", { ascending: false });
   return NextResponse.json({ contracts: data ?? [] });
 }
 
@@ -14,14 +16,16 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
+  const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
     return NextResponse.json({ error: "Contracts require a Basic plan or higher." }, { status: 403 });
   }
 
   const { title, client_name, client_email, body } = await request.json();
   const { data, error } = await supabase.from("contracts")
-    .insert({ title, client_name: client_name || null, client_email: client_email || null, body, user_id: user.id })
+    .insert({ title, client_name: client_name || null, client_email: client_email || null, body, user_id: ownerId })
     .select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ contract: data });
@@ -32,10 +36,12 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+
   const { id, title, client_name, client_email, body, status } = await request.json();
 
   if (status === "sent") {
-    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
     if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
       return NextResponse.json({ error: "Sending contracts requires a Basic plan or higher." }, { status: 403 });
     }
@@ -50,7 +56,7 @@ export async function PATCH(request: Request) {
   if (status !== undefined) updates.status = status;
 
   const { data, error } = await supabase.from("contracts")
-    .update(updates).eq("id", id).eq("user_id", user.id).select().single();
+    .update(updates).eq("id", id).eq("user_id", ownerId).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Send signing email when status changes to "sent" and client has email
@@ -58,7 +64,7 @@ export async function PATCH(request: Request) {
     try {
       const { data: profile } = await supabase.from("profiles")
         .select("smtp_email, smtp_password, full_name, business_name")
-        .eq("id", user.id).single();
+        .eq("id", ownerId).single();
       if (profile?.smtp_email && profile?.smtp_password) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL
           || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
@@ -101,8 +107,9 @@ export async function DELETE(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
   const { id } = await request.json();
-  const { error } = await supabase.from("contracts").delete().eq("id", id).eq("user_id", user.id);
+  const { error } = await supabase.from("contracts").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }
