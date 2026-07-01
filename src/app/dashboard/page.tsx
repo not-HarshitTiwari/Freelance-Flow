@@ -5,7 +5,6 @@ import { FileText, Receipt, Users, IndianRupee, TrendingUp, Clock, FileSignature
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AdBanner } from "@/components/ads/AdBanner";
-import { RevenueChart } from "@/components/dashboard/RevenueChart";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -47,37 +46,6 @@ export default async function DashboardPage() {
     s + (i.status === "unpaid" ? i.total : i.status === "partial" ? i.total - (i.amount_paid ?? 0) : 0), 0);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = totalEarned - totalExpenses;
-
-  // Revenue by client (paid invoices only)
-  const byClient = invoices
-    .filter(i => i.status === "paid")
-    .reduce<Record<string, number>>((acc, i) => {
-      const name = i.customer_name || i.customer_company || "Unknown";
-      acc[name] = (acc[name] || 0) + i.total;
-      return acc;
-    }, {});
-  const topClients = Object.entries(byClient).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxClientRevenue = topClients[0]?.[1] ?? 1;
-
-  // Build last 6 months chart data
-  const months: { month: string; earned: number; unpaid: number }[] = [];
-  for (let idx = 5; idx >= 0; idx--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - idx);
-    const label = d.toLocaleString("en-IN", { month: "short" });
-    const y = d.getFullYear(), m = d.getMonth();
-    const monthInvoices = invoices.filter((inv: InvRow) => {
-      const dt = new Date(inv.invoice_date || inv.created_at);
-      return dt.getFullYear() === y && dt.getMonth() === m;
-    });
-    months.push({
-      month: label,
-      earned: monthInvoices.reduce((s: number, i: InvRow) =>
-        s + (i.status === "paid" ? i.total : i.status === "partial" ? (i.amount_paid ?? 0) : 0), 0),
-      unpaid: monthInvoices.reduce((s: number, i: InvRow) =>
-        s + (i.status === "unpaid" ? i.total : i.status === "partial" ? i.total - (i.amount_paid ?? 0) : 0), 0),
-    });
-  }
 
   const name = (user?.user_metadata?.full_name as string)?.split(" ")[0] || "there";
   const hasContent = (proposalCount ?? 0) + (clientCount ?? 0) > 0;
@@ -176,41 +144,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Revenue Chart */}
-      <Card className="mb-8">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2 dark:text-white">
-            <TrendingUp size={16} className="text-violet-600" /> Revenue — Last 6 Months
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RevenueChart data={months} />
-        </CardContent>
-      </Card>
-
-      {topClients.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2 dark:text-white">
-              <Users size={16} className="text-violet-600" /> Revenue by Client
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {topClients.map(([name, amount]) => (
-              <div key={name} className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-700 dark:text-gray-300 font-medium truncate max-w-xs">{name}</span>
-                  <span className="text-gray-900 dark:text-white font-semibold shrink-0 ml-4">₹{amount.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${(amount / maxClientRevenue) * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {!isPro && hasContent && <AdBanner format="horizontal" className="mb-8" />}
 

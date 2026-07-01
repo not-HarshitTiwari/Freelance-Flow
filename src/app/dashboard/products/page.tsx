@@ -20,11 +20,13 @@ type Product = {
   track_inventory: boolean;
   quantity: number | null;
   low_stock_threshold: number | null;
+  margin_pct: number | null;
 };
 
 const empty = {
   name: "", description: "", type: "service" as "product" | "service",
   unit_price: "", unit: "unit", hsn_code: "", track_inventory: false, quantity: "", low_stock_threshold: "3",
+  margin_pct: "100",
 };
 
 export default function ProductsPage() {
@@ -81,6 +83,7 @@ export default function ProductsPage() {
       unit_price: String(p.unit_price), unit: p.unit || "unit", hsn_code: p.hsn_code || "",
       track_inventory: p.track_inventory, quantity: p.quantity != null ? String(p.quantity) : "",
       low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : "3",
+      margin_pct: p.margin_pct != null ? String(p.margin_pct) : "100",
     });
     setOpen(true);
   }
@@ -242,6 +245,18 @@ export default function ProductsPage() {
               <div className="space-y-1.5">
                 <Label>Description</Label>
                 <Input placeholder="Optional" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Profit Margin (%)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  placeholder="100"
+                  value={form.margin_pct}
+                  onChange={e => setForm({ ...form, margin_pct: e.target.value })}
+                />
               </div>
               {form.type === "product" && (
                 <div className="space-y-2 border-t dark:border-gray-700 pt-3">

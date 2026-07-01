@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send, Upload, Download } from "lucide-react";
+import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send, Upload, Download, Loader2 } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { toast } from "sonner";
 
@@ -20,10 +20,13 @@ type Client = {
   phone: string | null;
   company: string | null;
   address: string | null;
+  gstin: string | null;
   created_at: string;
 };
 
-const emptyForm = { name: "", email: "", phone: "", company: "", address: "" };
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+const emptyForm = { name: "", email: "", phone: "", company: "", address: "", gstin: "" };
 
 export default function ClientsPage() {
   const plan = usePlan();
@@ -38,6 +41,7 @@ export default function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState(emptyForm);
   const [importing, setImporting] = useState(false);
+  const [gstLooking, setGstLooking] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const supabase = useMemo(() => createClient(), []);
@@ -56,8 +60,30 @@ export default function ClientsPage() {
 
   function openEdit(c: Client) {
     setEditing(c);
-    setEditForm({ name: c.name, email: c.email, phone: c.phone || "", company: c.company || "", address: c.address || "" });
+    setEditForm({ name: c.name, email: c.email, phone: c.phone || "", company: c.company || "", address: c.address || "", gstin: c.gstin || "" });
     setEditOpen(true);
+  }
+
+  async function lookupGST(gstin: string, setF: (v: typeof emptyForm) => void, currentForm: typeof emptyForm) {
+    if (!GSTIN_RE.test(gstin.toUpperCase())) return;
+    setGstLooking(true);
+    try {
+      const res = await fetch(`/api/gst-lookup?gstin=${encodeURIComponent(gstin.toUpperCase())}`);
+      const data = await res.json();
+      if (!res.ok || data.error) { toast.error(data.error || "GSTIN not found"); return; }
+      setF({
+        ...currentForm,
+        gstin: gstin.toUpperCase(),
+        company: currentForm.company || data.tradeName || data.legalName || "",
+        name: currentForm.name || data.legalName || "",
+        address: currentForm.address || data.address || "",
+      });
+      toast.success("Business details fetched from GST portal");
+    } catch {
+      toast.error("GST lookup failed. Please fill details manually.");
+    } finally {
+      setGstLooking(false);
+    }
   }
 
   async function deleteClient(id: string, name: string, email: string) {
@@ -91,6 +117,7 @@ export default function ClientsPage() {
       phone: form.phone || null,
       company: form.company || null,
       address: form.address || null,
+      gstin: form.gstin || null,
     });
     if (error) { toast.error("Failed to add client"); }
     else { toast.success("Client added!"); setOpen(false); setForm(emptyForm); fetchClients(); }
@@ -107,6 +134,7 @@ export default function ClientsPage() {
       phone: editForm.phone || null,
       company: editForm.company || null,
       address: editForm.address || null,
+      gstin: editForm.gstin || null,
     }).eq("id", editing.id);
     if (error) { toast.error("Failed to update client"); }
     else { toast.success("Client updated!"); setEditOpen(false); setEditing(null); fetchClients(); }
@@ -114,8 +142,8 @@ export default function ClientsPage() {
   }
 
   function exportCSV() {
-    const rows = [["Name", "Email", "Phone", "Company", "Address"]];
-    for (const c of clients) rows.push([c.name, c.email, c.phone || "", c.company || "", c.address || ""]);
+    const rows = [["Name", "Email", "Phone", "Company", "Address", "GSTIN"]];
+    for (const c of clients) rows.push([c.name, c.email, c.phone || "", c.company || "", c.address || "", c.gstin || ""]);
     const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -196,6 +224,34 @@ export default function ClientsPage() {
     submitLabel: string;
   }) => (
     <form onSubmit={onSubmit} className="space-y-4">
+      {/* GSTIN with autofill — put at top so it can pre-fill other fields */}
+      <div className="space-y-2">
+        <Label>GSTIN</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="22AAAAA0000A1Z5"
+            value={f.gstin}
+            maxLength={15}
+            className="uppercase"
+            onChange={e => setF({ ...f, gstin: e.target.value.toUpperCase() })}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 dark:border-gray-600 dark:text-gray-300"
+            disabled={gstLooking || !GSTIN_RE.test(f.gstin)}
+            onClick={() => lookupGST(f.gstin, setF, f)}
+          >
+            {gstLooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+          </Button>
+        </div>
+        {f.gstin.length > 0 && f.gstin.length < 15 && (
+          <p className="text-xs text-gray-400">GSTIN must be 15 characters</p>
+        )}
+        {f.gstin.length === 15 && !GSTIN_RE.test(f.gstin) && (
+          <p className="text-xs text-red-500">Invalid GSTIN format</p>
+        )}
+      </div>
       <div className="space-y-2">
         <Label>Full Name *</Label>
         <Input placeholder="Rahul Sharma" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
@@ -313,6 +369,9 @@ export default function ClientsPage() {
                       <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
                         <MapPin size={11} /> {c.address}
                       </p>
+                    )}
+                    {c.gstin && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">GSTIN: {c.gstin}</p>
                     )}
                   </div>
                   <div className="absolute top-0 right-0 flex items-center gap-1.5">

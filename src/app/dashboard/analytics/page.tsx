@@ -12,7 +12,7 @@ export default async function AnalyticsPage() {
   const [{ data: rawInvoices }, { data: rawExpenses }, { data: profile }] = await Promise.all([
     supabase
       .from("invoices")
-      .select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid")
+      .select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid, items")
       .eq("user_id", ownerId),
     supabase.from("expenses").select("amount, date, category").eq("user_id", ownerId),
     supabase.from("profiles").select("plan").eq("id", ownerId).single(),

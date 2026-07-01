@@ -27,9 +27,10 @@ export async function POST(req: Request) {
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
   const body = await req.json();
-  const { name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold } = body;
+  const { name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold, margin_pct } = body;
 
   const trackInventory = type === "product" && !!track_inventory;
+  const parsedMargin = margin_pct !== undefined && margin_pct !== "" ? parseFloat(margin_pct) : 100;
 
   const { data, error } = await supabase
     .from("products_services")
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       track_inventory: trackInventory,
       quantity: trackInventory ? parseFloat(quantity) || 0 : null,
       low_stock_threshold: trackInventory ? (parseFloat(low_stock_threshold) || 3) : 3,
+      margin_pct: Math.min(100, Math.max(0, parsedMargin)),
     })
     .select()
     .single();
@@ -59,9 +61,10 @@ export async function PATCH(req: Request) {
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
 
-  const { id, name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold } = await req.json();
+  const { id, name, description, type, unit_price, unit, hsn_code, track_inventory, quantity, low_stock_threshold, margin_pct } = await req.json();
 
   const trackInventory = type === "product" && !!track_inventory;
+  const parsedMargin = margin_pct !== undefined && margin_pct !== "" ? parseFloat(margin_pct) : 100;
 
   const { error } = await supabase
     .from("products_services")
@@ -75,6 +78,7 @@ export async function PATCH(req: Request) {
       track_inventory: trackInventory,
       quantity: trackInventory ? parseFloat(quantity) || 0 : null,
       low_stock_threshold: trackInventory ? (parseFloat(low_stock_threshold) || 3) : 3,
+      margin_pct: Math.min(100, Math.max(0, parsedMargin)),
       low_stock_alert_sent_at: null,
       updated_at: new Date().toISOString(),
     })

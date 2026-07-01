@@ -1275,8 +1275,8 @@ function InvoicesPageInner() {
       {/* View Invoice Dialog */}
       {selected && (
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-          <DialogContent className="max-w-lg p-0 overflow-hidden">
-            <div className="flex flex-col max-h-[85vh]">
+          <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+            <div className="flex flex-col max-h-[90vh]">
             <div className="px-6 pt-6 pb-2 border-b dark:border-gray-700 shrink-0">
               <DialogHeader><DialogTitle>{selected.invoice_number}</DialogTitle></DialogHeader>
             </div>
@@ -1292,7 +1292,8 @@ function InvoicesPageInner() {
 
             <div className="flex-1 overflow-y-auto px-6 py-4 text-sm space-y-4">
             {previewTab === "preview" && selected ? (
-              <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-6 text-xs font-mono text-gray-800 dark:text-gray-200 space-y-4">
+              <div className="overflow-x-auto -mx-2 px-2">
+              <div className="min-w-[560px] bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-8 text-xs text-gray-800 dark:text-gray-200 space-y-5">
                 {/* Header */}
                 <div className="flex justify-between items-start pb-4 border-b dark:border-gray-700">
                   <div>
@@ -1327,8 +1328,9 @@ function InvoicesPageInner() {
                   <p className="font-bold text-base" style={{ color: pdfColor && pdfColor !== "none" ? pdfColor : undefined }}>Grand Total: ₹{selected.total.toLocaleString("en-IN")}</p>
                   {(selected.amount_paid ?? 0) > 0 && <p className="text-green-600">Paid: ₹{(selected.amount_paid ?? 0).toLocaleString("en-IN")}</p>}
                 </div>
-                {selected.notes && <div className="border-t dark:border-gray-700 pt-3"><p className="font-bold text-gray-500 uppercase text-xs mb-1">Notes</p><p>{selected.notes}</p></div>}
+                {selected.notes && <div className="border-t dark:border-gray-700 pt-4"><p className="font-bold text-gray-500 uppercase text-xs mb-1">Notes</p><p>{selected.notes}</p></div>}
                 {selected.terms && <div><p className="font-bold text-gray-500 uppercase text-xs mb-1">Terms</p><p>{selected.terms}</p></div>}
+              </div>
               </div>
             ) : (
               <div className="space-y-4">
