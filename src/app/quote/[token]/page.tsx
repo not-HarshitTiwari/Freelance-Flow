@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, XCircle, FileSpreadsheet, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle, FileSpreadsheet, Loader2, Download } from "lucide-react";
 import Image from "next/image";
+import { downloadQuotePdf } from "@/lib/quote-pdf";
 
 type QuoteItem = { description: string; quantity: number; rate: number };
 type Quote = {
@@ -13,13 +14,21 @@ type Quote = {
   cgst: number;
   sgst: number;
   igst: number;
+  gst_type: string | null;
+  gst_rate: number | null;
   total: number;
   status: string;
   valid_until: string | null;
   notes: string | null;
   terms: string | null;
   seller_name: string | null;
+  seller_address: string | null;
+  seller_email: string | null;
+  seller_phone: string | null;
+  seller_gstin: string | null;
   customer_name: string | null;
+  customer_company: string | null;
+  created_at: string | null;
 };
 
 export default function QuoteReviewPage({ params }: { params: Promise<{ token: string }> }) {
@@ -56,8 +65,14 @@ export default function QuoteReviewPage({ params }: { params: Promise<{ token: s
       body: JSON.stringify({ token, action }),
     });
     const data = await res.json();
-    if (data.ok) setDone(action);
-    else setError(data.error || "Something went wrong");
+    if (data.ok) {
+      setDone(action);
+      if (action === "accepted" && quote) {
+        downloadQuotePdf(quote).catch(() => { /* best-effort local download */ });
+      }
+    } else {
+      setError(data.error || "Something went wrong");
+    }
     setActing(false);
   }
 
@@ -130,6 +145,14 @@ export default function QuoteReviewPage({ params }: { params: Promise<{ token: s
               )}
             </div>
 
+            <Button
+              onClick={() => downloadQuotePdf(quote)}
+              variant="outline"
+              className="w-full gap-2 h-10 mb-3"
+            >
+              <Download size={16} /> Download Quote (PDF)
+            </Button>
+
             <div className="flex gap-3">
               <Button
                 onClick={() => handleAction("accepted")}
@@ -164,6 +187,11 @@ export default function QuoteReviewPage({ params }: { params: Promise<{ token: s
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Quote Declined</h2>
                 <p className="text-gray-500">The freelancer has been notified.</p>
               </>
+            )}
+            {quote && (
+              <Button onClick={() => downloadQuotePdf(quote)} variant="outline" className="gap-2 mt-2">
+                <Download size={16} /> Download Quote (PDF)
+              </Button>
             )}
           </div>
         )}

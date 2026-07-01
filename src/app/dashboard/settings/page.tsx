@@ -46,7 +46,8 @@ type InvNumFmt = {
 
 function buildPreview(fmt: InvNumFmt): string {
   const now = new Date();
-  const parts: string[] = [fmt.inv_prefix || "INV"];
+  const parts: string[] = [];
+  if (fmt.inv_prefix) parts.push(fmt.inv_prefix);
   if (fmt.inv_include_year) parts.push(now.getFullYear().toString());
   if (fmt.inv_include_month) parts.push(String(now.getMonth() + 1).padStart(2, "0"));
   if (fmt.inv_include_date) parts.push(String(now.getDate()).padStart(2, "0"));
@@ -516,8 +517,8 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Prefix</Label>
-              <Input value={invFmt.inv_prefix} onChange={e => setInvFmt(f => ({ ...f, inv_prefix: e.target.value }))} placeholder="INV" />
+              <Label>Prefix (optional)</Label>
+              <Input value={invFmt.inv_prefix} onChange={e => setInvFmt(f => ({ ...f, inv_prefix: e.target.value }))} placeholder="e.g. INV or leave blank" />
             </div>
             <div className="space-y-2">
               <Label>Suffix (optional)</Label>

@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("quotes")
-    .select("id, quote_number, items, subtotal, cgst, sgst, igst, total, status, valid_until, notes, terms, seller_name, seller_address, seller_email, seller_phone, seller_gstin, customer_name, customer_company, created_at")
+    .select("id, quote_number, items, subtotal, cgst, sgst, igst, gst_type, gst_rate, total, status, valid_until, notes, terms, seller_name, seller_address, seller_email, seller_phone, seller_gstin, customer_name, customer_company, created_at")
     .eq("review_token", token)
     .single();
 

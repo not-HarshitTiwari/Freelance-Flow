@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search } from "lucide-react";
+import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
+import { downloadQuotePdf } from "@/lib/quote-pdf";
 
 type QuoteItem = { description: string; quantity: number; rate: number; product_id?: string };
 
@@ -40,6 +41,11 @@ type Quote = {
   valid_until: string | null;
   notes: string | null;
   terms: string | null;
+  seller_name: string | null;
+  seller_address: string | null;
+  seller_email: string | null;
+  seller_phone: string | null;
+  seller_gstin: string | null;
   customer_name: string | null;
   customer_company: string | null;
   customer_email: string | null;
@@ -48,6 +54,15 @@ type Quote = {
   client_id: string | null;
   converted_invoice_id: string | null;
   created_at: string;
+};
+
+type Profile = {
+  full_name: string | null;
+  business_name: string | null;
+  business_address: string | null;
+  email: string | null;
+  phone: string | null;
+  gstin: string | null;
 };
 
 type Client = { id: string; name: string; email: string; company: string | null; address: string | null };
@@ -190,6 +205,8 @@ export default function QuotesPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerGstin, setCustomerGstin] = useState("");
+  const [sellerInfo, setSellerInfo] = useState({ seller_name: "", seller_address: "", seller_email: "", seller_phone: "", seller_gstin: "" });
+  const [editQuoteNumber, setEditQuoteNumber] = useState("");
 
   const fetchQuotes = useCallback(async () => {
     const res = await fetch("/api/quotes");
@@ -205,6 +222,17 @@ export default function QuotesPage() {
       setClients(clientData || []);
     });
     fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
+    fetch("/api/profile").then(r => r.json()).then(({ profile }: { profile: Profile | null }) => {
+      if (profile) {
+        setSellerInfo({
+          seller_name: profile.business_name || profile.full_name || "",
+          seller_address: profile.business_address || "",
+          seller_email: profile.email || "",
+          seller_phone: profile.phone || "",
+          seller_gstin: profile.gstin || "",
+        });
+      }
+    });
   }, [fetchQuotes, ownerId]);
 
   function resetForm() {
@@ -264,6 +292,7 @@ export default function QuotesPage() {
           client_id: selectedClientId || null,
           items, gst_type: gstType, gst_rate: gstRate,
           valid_until: validUntil || null, notes, terms,
+          ...sellerInfo,
           customer_name: customerName, customer_company: customerCompany,
           customer_email: customerEmail, customer_address: customerAddress, customer_gstin: customerGstin,
         }),
@@ -283,6 +312,7 @@ export default function QuotesPage() {
 
   function openEdit(q: Quote) {
     setEditing(q);
+    setEditQuoteNumber(q.quote_number);
     setItems(q.items?.length ? q.items : [{ ...emptyItem }]);
     setGstType(q.gst_type);
     setGstRate(q.gst_rate);
@@ -298,13 +328,14 @@ export default function QuotesPage() {
 
   async function saveEdit() {
     if (!editing) return;
+    if (!editQuoteNumber.trim()) { toast.error("Quote number can't be empty"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/quotes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: editing.id, items, gst_type: gstType, gst_rate: gstRate,
+          id: editing.id, quote_number: editQuoteNumber.trim(), items, gst_type: gstType, gst_rate: gstRate,
           valid_until: validUntil || null, notes, terms,
           customer_name: customerName, customer_company: customerCompany,
           customer_email: customerEmail, customer_address: customerAddress, customer_gstin: customerGstin,
@@ -470,6 +501,9 @@ export default function QuotesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={statusColors[q.status] || ""}>{q.status}</Badge>
+                  <button onClick={() => downloadQuotePdf(q)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Download quotation">
+                    <Download size={15} />
+                  </button>
                   <button onClick={() => openEdit(q)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Edit quote">
                     <Pencil size={15} />
                   </button>
@@ -501,6 +535,7 @@ export default function QuotesPage() {
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit — {editing?.quote_number}</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2"><Label>Quote Number *</Label><Input value={editQuoteNumber} onChange={e => setEditQuoteNumber(e.target.value)} required /></div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2"><Label>Client Name *</Label><Input value={customerName} onChange={e => setCustomerName(e.target.value)} required /></div>
               <div className="space-y-2"><Label>Client Email</Label><Input type="email" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} /></div>
@@ -535,6 +570,11 @@ export default function QuotesPage() {
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
               <Button variant="outline" className="dark:border-gray-600 dark:text-gray-300" onClick={() => setEditing(null)}>Cancel</Button>
+              {editing && (
+                <Button variant="outline" className="gap-1.5 dark:border-gray-600 dark:text-gray-300" onClick={() => downloadQuotePdf(editing)}>
+                  <Download size={14} /> Download
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>

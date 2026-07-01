@@ -68,13 +68,14 @@ export async function PATCH(request: Request) {
 
   const body = await request.json();
   const {
-    id, client_id, items, gst_type, gst_rate, valid_until, notes, terms, status,
+    id, quote_number, client_id, items, gst_type, gst_rate, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email,
   } = body;
 
   const updates: Record<string, unknown> = {};
   const allowed: Record<string, unknown> = {
+    quote_number: typeof quote_number === "string" ? quote_number.trim() || undefined : undefined,
     client_id, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email,

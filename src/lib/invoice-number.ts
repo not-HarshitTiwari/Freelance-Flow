@@ -18,7 +18,8 @@ export function formatInvoiceNumber(fmt: InvoiceNumberFormat, now: Date = new Da
   const digits = fmt.inv_seq_digits ?? 4;
   const seq = fmt.inv_next_seq ?? 1;
 
-  const parts: string[] = [prefix];
+  const parts: string[] = [];
+  if (prefix) parts.push(prefix);
   if (fmt.inv_include_year !== false) parts.push(now.getFullYear().toString());
   if (fmt.inv_include_month) parts.push(String(now.getMonth() + 1).padStart(2, "0"));
   if (fmt.inv_include_date) parts.push(String(now.getDate()).padStart(2, "0"));
