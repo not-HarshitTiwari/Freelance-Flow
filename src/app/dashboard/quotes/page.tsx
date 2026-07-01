@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download } from "lucide-react";
+import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download, MessageCircle } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 import { downloadQuotePdf } from "@/lib/quote-pdf";
@@ -49,6 +49,7 @@ type Quote = {
   customer_name: string | null;
   customer_company: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
   customer_address: string | null;
   customer_gstin: string | null;
   client_id: string | null;
@@ -65,7 +66,7 @@ type Profile = {
   gstin: string | null;
 };
 
-type Client = { id: string; name: string; email: string; company: string | null; address: string | null };
+type Client = { id: string; name: string; email: string; phone: string | null; company: string | null; address: string | null };
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
@@ -203,6 +204,7 @@ export default function QuotesPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerCompany, setCustomerCompany] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerGstin, setCustomerGstin] = useState("");
   const [sellerInfo, setSellerInfo] = useState({ seller_name: "", seller_address: "", seller_email: "", seller_phone: "", seller_gstin: "" });
@@ -218,7 +220,7 @@ export default function QuotesPage() {
     if (!ownerId) return;
     fetchQuotes();
     const supabase = createClient();
-    supabase.from("clients").select("id, name, email, company, address").eq("user_id", ownerId).order("name").then(({ data: clientData }) => {
+    supabase.from("clients").select("id, name, email, phone, company, address").eq("user_id", ownerId).order("name").then(({ data: clientData }) => {
       setClients(clientData || []);
     });
     fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
@@ -246,6 +248,7 @@ export default function QuotesPage() {
     setCustomerName("");
     setCustomerCompany("");
     setCustomerEmail("");
+    setCustomerPhone("");
     setCustomerAddress("");
     setCustomerGstin("");
   }
@@ -257,6 +260,7 @@ export default function QuotesPage() {
     if (c) {
       setCustomerName(c.name);
       setCustomerEmail(c.email);
+      setCustomerPhone(c.phone || "");
       setCustomerCompany(c.company || "");
       setCustomerAddress(c.address || "");
     }
@@ -294,7 +298,7 @@ export default function QuotesPage() {
           valid_until: validUntil || null, notes, terms,
           ...sellerInfo,
           customer_name: customerName, customer_company: customerCompany,
-          customer_email: customerEmail, customer_address: customerAddress, customer_gstin: customerGstin,
+          customer_email: customerEmail, customer_phone: customerPhone, customer_address: customerAddress, customer_gstin: customerGstin,
         }),
       });
       const data = await res.json();
@@ -322,6 +326,7 @@ export default function QuotesPage() {
     setCustomerName(q.customer_name || "");
     setCustomerCompany(q.customer_company || "");
     setCustomerEmail(q.customer_email || "");
+    setCustomerPhone(q.customer_phone || "");
     setCustomerAddress(q.customer_address || "");
     setCustomerGstin(q.customer_gstin || "");
   }
@@ -338,7 +343,7 @@ export default function QuotesPage() {
           id: editing.id, quote_number: editQuoteNumber.trim(), items, gst_type: gstType, gst_rate: gstRate,
           valid_until: validUntil || null, notes, terms,
           customer_name: customerName, customer_company: customerCompany,
-          customer_email: customerEmail, customer_address: customerAddress, customer_gstin: customerGstin,
+          customer_email: customerEmail, customer_phone: customerPhone, customer_address: customerAddress, customer_gstin: customerGstin,
         }),
       });
       const data = await res.json();
@@ -370,6 +375,21 @@ export default function QuotesPage() {
     } else {
       toast.error("Failed to generate link");
     }
+  }
+
+  async function sendQuoteWhatsApp(id: string) {
+    try {
+      const res = await fetch("/api/quotes/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteId: id }) });
+      const data = await res.json();
+      if (data.fallback) {
+        window.open(data.link, "_blank");
+      } else if (data.success) {
+        toast.success("Sent over WhatsApp!");
+      } else {
+        throw new Error(data.error || "Failed to send WhatsApp message");
+      }
+      fetchQuotes();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send WhatsApp message"); }
   }
 
   async function convertToInvoice(id: string) {
@@ -425,6 +445,7 @@ export default function QuotesPage() {
                 <div className="space-y-2"><Label>Client Name *</Label><Input value={customerName} onChange={e => setCustomerName(e.target.value)} required /></div>
                 <div className="space-y-2"><Label>Client Email</Label><Input type="email" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} /></div>
               </div>
+              <div className="space-y-2"><Label>Client Phone (WhatsApp)</Label><Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} /></div>
               <div className="space-y-2"><Label>Company</Label><Input value={customerCompany} onChange={e => setCustomerCompany(e.target.value)} /></div>
 
               <ItemRows rows={items} products={products} onChange={updateItem} onSelectProduct={pickProduct} onAdd={addItem} onRemove={removeItem} />
@@ -509,6 +530,9 @@ export default function QuotesPage() {
                   </button>
                   <button onClick={() => copyReviewLink(q.id)} className="text-gray-400 hover:text-green-600 dark:hover:text-green-400" title="Copy client review link">
                     <Link2 size={15} />
+                  </button>
+                  <button onClick={() => sendQuoteWhatsApp(q.id)} className="text-gray-400 hover:text-green-500" title="Send by WhatsApp">
+                    <MessageCircle size={15} />
                   </button>
                   {q.status === "accepted" && !q.converted_invoice_id && (
                     <button

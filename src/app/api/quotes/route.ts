@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const {
     client_id, items, gst_type, gst_rate, valid_until, notes, terms,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_company, customer_address, customer_gstin, customer_email,
+    customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
   } = body;
 
   const { subtotal, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin,
     customer_email: customer_email || null,
+    customer_phone: customer_phone || null,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -70,7 +71,7 @@ export async function PATCH(request: Request) {
   const {
     id, quote_number, client_id, items, gst_type, gst_rate, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_company, customer_address, customer_gstin, customer_email,
+    customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
   } = body;
 
   const updates: Record<string, unknown> = {};
@@ -78,7 +79,7 @@ export async function PATCH(request: Request) {
     quote_number: typeof quote_number === "string" ? quote_number.trim() || undefined : undefined,
     client_id, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_company, customer_address, customer_gstin, customer_email,
+    customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
   };
 
   if (items !== undefined) {

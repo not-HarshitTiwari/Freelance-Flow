@@ -10,6 +10,7 @@ import { Eye, EyeOff, Upload, X, Pen, Trash2, Lock, UserPlus, UserX } from "luci
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { TwoFactorSettings } from "@/components/dashboard/TwoFactorSettings";
 
 type PdfTemplate = "classic" | "minimal" | "bold";
 const PDF_TEMPLATES: { id: PdfTemplate; label: string }[] = [
@@ -629,6 +630,8 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <TwoFactorSettings />
 
       {/* Team Members — Advanced+ */}
       <Card>

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { sendLowStockAlerts } from "@/lib/low-stock-alerts";
+import { isWhatsAppCloudConfigured, sendWhatsAppText } from "@/lib/whatsapp";
 
 // Vercel cron calls this every day at 9am IST
 export async function GET(req: Request) {
@@ -17,10 +18,10 @@ export async function GET(req: Request) {
   const today = new Date().toISOString().slice(0, 10);
   const { data: overdueInvoices } = await supabase
     .from("invoices")
-    .select("id, invoice_number, customer_name, customer_email, total, amount_paid, due_date, user_id, reminder_sent_at, payment_link, status")
+    .select("id, invoice_number, customer_name, customer_email, customer_phone, total, amount_paid, due_date, user_id, reminder_sent_at, whatsapp_sent_at, payment_link, status")
     .in("status", ["unpaid", "partial", "overdue"])
     .lt("due_date", today)
-    .not("customer_email", "is", null);
+    .or("customer_email.not.is.null,customer_phone.not.is.null");
 
   // Mark all overdue unpaid invoices as "overdue" in the DB
   const unpaidIds = (overdueInvoices ?? []).filter(i => i.status === "unpaid").map(i => i.id);
@@ -41,10 +42,25 @@ export async function GET(req: Request) {
       .eq("id", inv.user_id)
       .single();
 
-    if (!profile?.smtp_email || !profile?.smtp_password) continue;
+    const cadenceDays = profile?.reminder_cadence_days ?? 3;
+    const overdueDays = Math.floor((Date.now() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
+
+    // WhatsApp reminder — independent channel & cadence from email
+    if (inv.customer_phone && isWhatsAppCloudConfigured()) {
+      const dueSince = inv.whatsapp_sent_at
+        ? (Date.now() - new Date(inv.whatsapp_sent_at).getTime()) / (1000 * 60 * 60 * 24)
+        : Infinity;
+      if (dueSince >= cadenceDays) {
+        const senderName = profile?.business_name || profile?.full_name || "FreelanceFlow";
+        const message = `Hi ${inv.customer_name || "there"}, this is a reminder that invoice ${inv.invoice_number} for ₹${remaining.toLocaleString("en-IN")} from ${senderName} was due on ${new Date(inv.due_date).toLocaleDateString("en-IN")} (${overdueDays} day${overdueDays !== 1 ? "s" : ""} ago).${inv.payment_link ? ` Pay here: ${inv.payment_link}` : ""} Thank you!`;
+        const result = await sendWhatsAppText(inv.customer_phone, message);
+        if (result.ok) await supabase.from("invoices").update({ whatsapp_sent_at: new Date().toISOString() }).eq("id", inv.id);
+      }
+    }
+
+    if (!inv.customer_email || !profile?.smtp_email || !profile?.smtp_password) continue;
 
     // Don't spam — only send if no reminder within the user's configured cadence
-    const cadenceDays = profile.reminder_cadence_days ?? 3;
     if (inv.reminder_sent_at) {
       const lastSent = new Date(inv.reminder_sent_at);
       const daysSince = (Date.now() - lastSent.getTime()) / (1000 * 60 * 60 * 24);
@@ -58,7 +74,6 @@ export async function GET(req: Request) {
       });
 
       const senderName = profile.business_name || profile.full_name || profile.smtp_email;
-      const overdueDays = Math.floor((Date.now() - new Date(inv.due_date).getTime()) / (1000 * 60 * 60 * 24));
 
       await transporter.sendMail({
         from: `"${senderName}" <${profile.smtp_email}>`,

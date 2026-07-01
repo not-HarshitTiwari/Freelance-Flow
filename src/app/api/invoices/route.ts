@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     payment_methods, transaction_id, notes, terms,
     upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_company, customer_address, customer_gstin, customer_email,
+    customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
   } = body;
 
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin,
     customer_email: customer_email || null,
+    customer_phone: customer_phone || null,
     is_recurring: wantsRecurring,
     recurrence_interval: wantsRecurring ? recurrence_interval : null,
     next_invoice_date: wantsRecurring ? next_invoice_date : null,
@@ -110,7 +111,7 @@ export async function PATCH(request: Request) {
     upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
     notes, terms,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_email, customer_company, customer_address, customer_gstin,
+    customer_name, customer_email, customer_company, customer_address, customer_gstin, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
     payment_link, payment_link_id, reminder_sent_at,
   } = body;
@@ -135,7 +136,7 @@ export async function PATCH(request: Request) {
     upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name,
     notes, terms,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
-    customer_name, customer_email, customer_company, customer_address, customer_gstin,
+    customer_name, customer_email, customer_company, customer_address, customer_gstin, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
     payment_link, payment_link_id, reminder_sent_at,
   };

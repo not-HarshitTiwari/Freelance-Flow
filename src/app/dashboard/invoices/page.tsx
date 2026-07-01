@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy } from "lucide-react";
+import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy, Undo2 } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
@@ -67,9 +67,11 @@ type Invoice = {
   seller_gstin: string | null;
   customer_name: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
   customer_company: string | null;
   customer_address: string | null;
   customer_gstin: string | null;
+  whatsapp_sent_at: string | null;
   created_at: string;
 };
 
@@ -371,7 +373,7 @@ const emptyForm = {
   notes: "",
   terms: "Payment due within 15 days of invoice date.",
   seller_name: "", seller_address: "", seller_email: "", seller_phone: "", seller_gstin: "",
-  customer_name: "", customer_email: "", customer_company: "", customer_address: "", customer_gstin: "",
+  customer_name: "", customer_email: "", customer_phone: "", customer_company: "", customer_address: "", customer_gstin: "",
   is_recurring: false,
   recurrence_interval: "monthly",
 };
@@ -462,6 +464,10 @@ function InvoicesPageInner() {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [paying, setPaying] = useState(false);
+  const [creditNoteTarget, setCreditNoteTarget] = useState<Invoice | null>(null);
+  const [creditNoteAmount, setCreditNoteAmount] = useState("");
+  const [creditNoteReason, setCreditNoteReason] = useState("");
+  const [issuingCreditNote, setIssuingCreditNote] = useState(false);
   const [reminding, setReminding] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = useState(1);
@@ -546,7 +552,7 @@ function InvoicesPageInner() {
   function selectClient(id: string) {
     const c = clients.find(cl => cl.id === id);
     if (!c) return;
-    setForm(f => ({ ...f, customer_name: c.name, customer_email: c.email || "", customer_company: c.company || "", customer_address: c.address || "", customer_gstin: "" }));
+    setForm(f => ({ ...f, customer_name: c.name, customer_email: c.email || "", customer_phone: c.phone || "", customer_company: c.company || "", customer_address: c.address || "", customer_gstin: "" }));
   }
 
   function togglePaymentMethod(method: string) {
@@ -628,6 +634,21 @@ function InvoicesPageInner() {
     setBulkWorking(false);
   }
 
+  async function sendWhatsApp(inv: Invoice, kind: "send" | "remind" = "send") {
+    try {
+      const res = await fetch("/api/invoices/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: inv.id, kind }) });
+      const data = await res.json();
+      if (data.fallback) {
+        window.open(data.link, "_blank");
+      } else if (data.success) {
+        toast.success("Sent over WhatsApp!");
+        fetchInvoices();
+      } else {
+        throw new Error(data.error || "Failed to send WhatsApp message");
+      }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send WhatsApp message"); }
+  }
+
   async function sendReminder(inv: Invoice) {
     setReminding(inv.id);
     try {
@@ -653,6 +674,21 @@ function InvoicesPageInner() {
       fetchInvoices();
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to record payment"); }
     finally { setPaying(false); }
+  }
+
+  async function issueCreditNote(e: React.FormEvent) {
+    e.preventDefault();
+    if (!creditNoteTarget) return;
+    setIssuingCreditNote(true);
+    try {
+      const res = await fetch("/api/credit-notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: creditNoteTarget.id, amount: parseFloat(creditNoteAmount), reason: creditNoteReason }) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      toast.success(`Credit note ${data.creditNote.credit_note_number} issued!`);
+      setCreditNoteTarget(null); setCreditNoteAmount(""); setCreditNoteReason("");
+      fetchInvoices();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to issue credit note"); }
+    finally { setIssuingCreditNote(false); }
   }
 
   function exportInvoicesCSV() {
@@ -709,6 +745,7 @@ function InvoicesPageInner() {
       seller_gstin: inv.seller_gstin || "",
       customer_name: inv.customer_name || "",
       customer_email: inv.customer_email || "",
+      customer_phone: inv.customer_phone || "",
       customer_company: inv.customer_company || "",
       customer_address: inv.customer_address || "",
       customer_gstin: inv.customer_gstin || "",
@@ -808,6 +845,7 @@ function InvoicesPageInner() {
       seller_gstin: inv.seller_gstin || "",
       customer_name: inv.customer_name || "",
       customer_email: inv.customer_email || "",
+      customer_phone: inv.customer_phone || "",
       customer_company: inv.customer_company || "",
       customer_address: inv.customer_address || "",
       customer_gstin: inv.customer_gstin || "",
@@ -976,6 +1014,7 @@ function InvoicesPageInner() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5"><Label>Customer Name *</Label><Input placeholder="Rahul Sharma" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} required /></div>
                   <div className="space-y-1.5"><Label>Customer Email</Label><Input type="email" placeholder="rahul@company.com" value={form.customer_email} onChange={e => setForm({ ...form, customer_email: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>Customer Phone (WhatsApp)</Label><Input placeholder="+91 98765 43210" value={form.customer_phone} onChange={e => setForm({ ...form, customer_phone: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Company Name</Label><Input placeholder="ABC Pvt Ltd" value={form.customer_company} onChange={e => setForm({ ...form, customer_company: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Customer GSTIN (B2B)</Label><Input placeholder="27AAAAA0000A1Z5" value={form.customer_gstin} onChange={e => setForm({ ...form, customer_gstin: e.target.value })} /></div>
                   <div className="space-y-1.5 col-span-2"><Label>Billing Address</Label><Input placeholder="Delhi, India" value={form.customer_address} onChange={e => setForm({ ...form, customer_address: e.target.value })} /></div>
@@ -1236,20 +1275,27 @@ function InvoicesPageInner() {
                   <button onClick={() => openEdit(inv)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Edit"><Pencil size={15} /></button>
                   {canSendEmail && <button onClick={() => { setSendTarget(inv); setSendEmail(inv.customer_email || ""); setSendName(inv.customer_name || ""); setSendMessage(""); }} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Send by email"><Send size={16} /></button>}
                   <button
-                    onClick={() => {
-                      const msg = encodeURIComponent(`Hi ${inv.customer_name || "there"}, please find your invoice ${inv.invoice_number} for ₹${inv.total.toLocaleString("en-IN")}${inv.due_date ? `, due on ${new Date(inv.due_date).toLocaleDateString("en-IN")}` : ""}. Please arrange payment. Thank you!`);
-                      window.open(`https://wa.me/?text=${msg}`, "_blank");
-                    }}
-                    className="text-gray-400 hover:text-green-500" title="WhatsApp"
+                    onClick={() => sendWhatsApp(inv, "send")}
+                    className="text-gray-400 hover:text-green-500" title="Send by WhatsApp"
                   ><MessageCircle size={16} /></button>
                   {inv.customer_email && inv.status !== "paid" && (
-                    <button onClick={() => sendReminder(inv)} disabled={reminding === inv.id} className="text-gray-400 hover:text-amber-500" title="Send payment reminder">
+                    <button onClick={() => sendReminder(inv)} disabled={reminding === inv.id} className="text-gray-400 hover:text-amber-500" title="Send payment reminder by email">
                       <Bell size={15} className={reminding === inv.id ? "animate-pulse" : ""} />
+                    </button>
+                  )}
+                  {inv.status !== "paid" && (
+                    <button onClick={() => sendWhatsApp(inv, "remind")} className="text-gray-400 hover:text-amber-500" title="Send payment reminder by WhatsApp">
+                      <MessageCircle size={13} />
                     </button>
                   )}
                   {inv.status !== "paid" && (
                     <button onClick={() => { setPayTarget(inv); setPayAmount(String(inv.total - (inv.amount_paid ?? 0))); setPayNote(""); }} className="text-gray-400 hover:text-green-600" title="Record payment">
                       <IndianRupee size={15} />
+                    </button>
+                  )}
+                  {inv.status !== "paid" && (
+                    <button onClick={() => { setCreditNoteTarget(inv); setCreditNoteAmount(String(inv.total - (inv.amount_paid ?? 0))); setCreditNoteReason(""); }} className="text-gray-400 hover:text-orange-500" title="Issue credit note">
+                      <Undo2 size={15} />
                     </button>
                   )}
                   {canPaymentLink && <button onClick={() => generatePaymentLink(inv)} disabled={generatingLink === inv.id || inv.status === "paid"} className="text-gray-400 hover:text-blue-600 disabled:opacity-30" title="Generate Razorpay payment link">
@@ -1482,6 +1528,9 @@ function InvoicesPageInner() {
                 {canSendEmail && <Button variant="outline" onClick={() => { setSendTarget(selected); setSendEmail(selected.customer_email || ""); setSendName(selected.customer_name || ""); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
                   <Send size={16} /> Send Email
                 </Button>}
+                <Button variant="outline" onClick={() => { sendWhatsApp(selected, "send"); setSelected(null); }} className="flex-1 gap-2 dark:border-gray-600 dark:text-gray-300">
+                  <MessageCircle size={16} /> Send WhatsApp
+                </Button>
               </div>
             </div>
             </div>
@@ -1525,6 +1574,7 @@ function InvoicesPageInner() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5"><Label>Customer Name</Label><Input value={ef.customer_name} onChange={e => setEf({ customer_name: e.target.value })} /></div>
                     <div className="space-y-1.5"><Label>Customer Email</Label><Input type="email" value={ef.customer_email} onChange={e => setEf({ customer_email: e.target.value })} /></div>
+                    <div className="space-y-1.5"><Label>Customer Phone (WhatsApp)</Label><Input value={ef.customer_phone} onChange={e => setEf({ customer_phone: e.target.value })} /></div>
                     <div className="space-y-1.5"><Label>Company</Label><Input value={ef.customer_company} onChange={e => setEf({ customer_company: e.target.value })} /></div>
                     <div className="space-y-1.5"><Label>GSTIN</Label><Input value={ef.customer_gstin} onChange={e => setEf({ customer_gstin: e.target.value })} /></div>
                     <div className="space-y-1.5 col-span-2"><Label>Billing Address</Label><Input value={ef.customer_address} onChange={e => setEf({ customer_address: e.target.value })} /></div>
@@ -1747,6 +1797,31 @@ function InvoicesPageInner() {
             </div>
             <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white" disabled={paying}>
               {paying ? "Saving..." : "Record Payment"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Issue Credit Note Dialog */}
+      <Dialog open={!!creditNoteTarget} onOpenChange={v => { if (!v) setCreditNoteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Issue Credit Note</DialogTitle></DialogHeader>
+          {creditNoteTarget && (
+            <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400 -mt-2 mb-2">
+              <p>{creditNoteTarget.invoice_number} — Balance ₹{(creditNoteTarget.total - (creditNoteTarget.amount_paid ?? 0)).toLocaleString("en-IN")}</p>
+            </div>
+          )}
+          <form onSubmit={issueCreditNote} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Credit Amount (₹) *</Label>
+              <Input type="number" min={0.01} step={0.01} value={creditNoteAmount} onChange={e => setCreditNoteAmount(e.target.value)} placeholder="Enter amount" required />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason (optional)</Label>
+              <Input value={creditNoteReason} onChange={e => setCreditNoteReason(e.target.value)} placeholder="e.g. Returned item, billing error" />
+            </div>
+            <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white" disabled={issuingCreditNote}>
+              {issuingCreditNote ? "Saving..." : "Issue Credit Note"}
             </Button>
           </form>
         </DialogContent>

@@ -99,6 +99,70 @@ export default function TaxReportPage() {
     toast.success("Report downloaded!");
   }
 
+  function downloadFile(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  // GSTR-1 (outward supplies) — B2B invoices sheet + B2C(Small) summary sheet,
+  // matching the column layout of the GST portal's offline GSTR-1 Excel tool.
+  function downloadGSTR1CSV() {
+    const b2b = paid.filter(i => i.customer_gstin);
+    const b2c = paid.filter(i => !i.customer_gstin);
+
+    const rows: (string | number)[][] = [
+      [`GSTR-1 — ${QUARTERS[quarter].label} ${year}`],
+      [],
+      ["B2B Invoices"],
+      ["GSTIN/UIN of Recipient", "Invoice Number", "Invoice Date", "Invoice Value", "Place of Supply (State Code)", "Reverse Charge", "Invoice Type", "Rate (%)", "Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess"],
+      ...b2b.map(i => [
+        i.customer_gstin || "", i.invoice_number, i.invoice_date, i.total,
+        (i.customer_gstin || "").slice(0, 2), "N", "Regular B2B", i.gst_rate,
+        i.subtotal, i.igst ?? 0, i.cgst ?? 0, i.sgst ?? 0, 0,
+      ]),
+      [],
+      ["B2C (Small) Summary — grouped by tax rate"],
+      ["Type", "Place of Supply", "Rate (%)", "Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess"],
+    ];
+
+    const b2cGroups = new Map<string, { rate: number; intraState: boolean; taxable: number; igst: number; cgst: number; sgst: number }>();
+    for (const i of b2c) {
+      const intraState = i.gst_type !== "igst";
+      const key = `${i.gst_rate}-${intraState}`;
+      const g = b2cGroups.get(key) || { rate: i.gst_rate, intraState, taxable: 0, igst: 0, cgst: 0, sgst: 0 };
+      g.taxable += i.subtotal; g.igst += i.igst ?? 0; g.cgst += i.cgst ?? 0; g.sgst += i.sgst ?? 0;
+      b2cGroups.set(key, g);
+    }
+    for (const g of b2cGroups.values()) {
+      rows.push(["B2C (Small)", g.intraState ? "Same state as business (assumed)" : "Other state (verify)", g.rate, g.taxable, g.igst, g.cgst, g.sgst, 0]);
+    }
+    rows.push([]);
+    rows.push(["Note: Place of Supply for B2C invoices is approximated from GST type — verify against the customer's actual billing state before filing."]);
+
+    downloadFile(rows.map(r => r.map(csvEscape).join(",")).join("\n"), `GSTR-1-${QUARTERS[quarter].label.replace(/[^A-Za-z0-9]/g, "-")}-${year}.csv`);
+    toast.success("GSTR-1 export downloaded!");
+  }
+
+  // GSTR-3B (Table 3.1) — outward taxable supplies summary
+  function downloadGSTR3BCSV() {
+    const rows: (string | number)[][] = [
+      [`GSTR-3B — Table 3.1 Outward Supplies — ${QUARTERS[quarter].label} ${year}`],
+      [],
+      ["Nature of Supplies", "Total Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess"],
+      ["(a) Outward taxable supplies (other than zero rated, nil rated and exempted)", totals.subtotal, totals.igst, totals.cgst, totals.sgst, 0],
+      ["(b) Outward taxable supplies (zero rated)", 0, 0, 0, 0, 0],
+      ["(c) Other outward supplies (Nil rated, exempted)", 0, 0, 0, 0, 0],
+      ["(d) Inward supplies (liable to reverse charge)", 0, 0, 0, 0, 0],
+      ["(e) Non-GST outward supplies", 0, 0, 0, 0, 0],
+      [],
+      ["Total Tax Liability", totals.subtotal, totals.igst, totals.cgst, totals.sgst, 0],
+    ];
+    downloadFile(rows.map(r => r.map(csvEscape).join(",")).join("\n"), `GSTR-3B-${QUARTERS[quarter].label.replace(/[^A-Za-z0-9]/g, "-")}-${year}.csv`);
+    toast.success("GSTR-3B export downloaded!");
+  }
+
   // Double-entry ledger CSV (Tally/Zoho Books/QuickBooks compatible voucher import)
   function downloadAccountingCSV() {
     const rows: (string | number)[][] = [
@@ -138,12 +202,18 @@ export default function TaxReportPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GST Tax Report</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Quarterly summary for GSTR filing</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           {canExportAccounting && (
             <Button onClick={downloadAccountingCSV} variant="outline" className="gap-2" title="Double-entry ledger CSV compatible with Tally, Zoho Books & QuickBooks">
               <FileSpreadsheet size={16} /> Export for Accounting Software
             </Button>
           )}
+          <Button onClick={downloadGSTR1CSV} variant="outline" className="gap-2" title="B2B + B2C(Small) summary in the GSTR-1 offline tool column layout">
+            <FileText size={16} /> Export GSTR-1
+          </Button>
+          <Button onClick={downloadGSTR3BCSV} variant="outline" className="gap-2" title="Table 3.1 outward supplies summary">
+            <FileText size={16} /> Export GSTR-3B
+          </Button>
           <Button onClick={downloadCSV} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
             <Download size={16} /> Export CSV
           </Button>
