@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IndianRupee, TrendingUp, Receipt, BarChart3, ChevronDown } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 
-type InvItem = { name: string; qty: number; price: number; amount: number };
+type InvItem = { description: string; quantity: number; rate: number; product_id?: string | null };
 type InvRow = {
   total: number;
   status: string;
@@ -17,6 +17,7 @@ type InvRow = {
   items: InvItem[] | null;
 };
 type ExpRow = { amount: number; date: string; category: string };
+type ProductRow = { id: string; name: string; margin_pct: number | null };
 
 const RANGES = [
   { label: "3M", months: 3 },
@@ -45,13 +46,45 @@ function earnedFor(i: InvRow) {
   return i.status === "paid" ? i.total : i.status === "partial" ? (i.amount_paid ?? 0) : 0;
 }
 
+function itemAmount(item: InvItem) {
+  return (item.quantity || 0) * (item.rate || 0);
+}
+
 function fmt(n: number) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
-function GroupedBarChart({ data }: { data: { month: string; revenue: number; expenses: number }[] }) {
+function useElementSize<T extends HTMLElement>(fallback: { width: number; height: number }) {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState(fallback);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setSize({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return { ref, size };
+}
+
+function GroupedBarChart({
+  data,
+  width = 500,
+  height = 180,
+}: {
+  data: { month: string; revenue: number; expenses: number }[];
+  width?: number;
+  height?: number;
+}) {
   const maxVal = Math.max(...data.flatMap(d => [d.revenue, d.expenses]), 1);
-  const H = 180, W = 500, PAD_L = 46, PAD_B = 28, PAD_T = 20, PAD_R = 8;
+  const H = height, W = width, PAD_L = 46, PAD_B = 28, PAD_T = 20, PAD_R = 8;
   const chartW = W - PAD_L - PAD_R;
   const chartH = H - PAD_B - PAD_T;
   const groupW = chartW / (data.length || 1);
@@ -59,7 +92,7 @@ function GroupedBarChart({ data }: { data: { month: string; revenue: number; exp
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
       {ticks.map(t => {
         const v = maxVal * t;
         const y = PAD_T + chartH - t * chartH;
@@ -92,16 +125,24 @@ function GroupedBarChart({ data }: { data: { month: string; revenue: number; exp
   );
 }
 
-function CashFlowChart({ data }: { data: { month: string; net: number }[] }) {
+function CashFlowChart({
+  data,
+  width = 500,
+  height = 180,
+}: {
+  data: { month: string; net: number }[];
+  width?: number;
+  height?: number;
+}) {
   const maxAbs = Math.max(...data.map(d => Math.abs(d.net)), 1);
-  const H = 180, W = 500, PAD_L = 50, PAD_B = 28, PAD_T = 16, PAD_R = 8;
+  const H = height, W = width, PAD_L = 50, PAD_B = 28, PAD_T = 16, PAD_R = 8;
   const chartW = W - PAD_L - PAD_R;
   const chartH = H - PAD_B - PAD_T;
   const zeroY = PAD_T + chartH / 2;
   const barW = Math.min((chartW / (data.length || 1)) * 0.55, 28);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
       <line x1={PAD_L} y1={zeroY} x2={W - PAD_R} y2={zeroY} stroke="#6b7280" strokeWidth="0.8" strokeDasharray="4,3" />
       <text x={PAD_L - 3} y={zeroY + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">0</text>
       {data.map((d, i) => {
@@ -200,12 +241,20 @@ function DonutChart({ slices }: { slices: { label: string; value: number; color:
 export function AnalyticsClient({
   invoices,
   expenses,
+  products,
   isFree,
 }: {
   invoices: InvRow[];
   expenses: ExpRow[];
+  products: ProductRow[];
   isFree: boolean;
 }) {
+  const marginByProduct = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of products) map[p.id] = p.margin_pct ?? 100;
+    return map;
+  }, [products]);
+
   const [rangeMonths, setRangeMonths] = useState(6);
   const [useCustom, setUseCustom] = useState(false);
   const [fromDate, setFromDate] = useState("");
@@ -244,8 +293,24 @@ export function AnalyticsClient({
 
   const totalRevenue = rangeInvoices.reduce((s, i) => s + earnedFor(i), 0);
   const totalExpenses = rangeExpenses.reduce((s, e) => s + e.amount, 0);
-  const netProfit = totalRevenue - totalExpenses;
-  const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+  const totalCogs = useMemo(() => {
+    let cogs = 0;
+    for (const i of rangeInvoices) {
+      if (!i.items?.length) continue;
+      const earned = earnedFor(i);
+      if (earned === 0) continue;
+      const ratio = earned / (i.total || 1);
+      for (const item of i.items) {
+        const revenue = itemAmount(item) * ratio;
+        const marginPct = item.product_id ? marginByProduct[item.product_id] ?? 100 : 100;
+        cogs += revenue * (1 - marginPct / 100);
+      }
+    }
+    return cogs;
+  }, [rangeInvoices, marginByProduct]);
+
+  const netProfit = totalRevenue - totalExpenses - totalCogs;
   const outstanding = rangeInvoices.reduce(
     (s, i) =>
       s +
@@ -330,8 +395,8 @@ export function AnalyticsClient({
       if (earned === 0) continue;
       const ratio = earned / (i.total || 1);
       for (const item of i.items) {
-        const name = item.name || "Other";
-        map[name] = (map[name] || 0) + (item.amount || 0) * ratio;
+        const name = item.description || "Other";
+        map[name] = (map[name] || 0) + itemAmount(item) * ratio;
       }
     }
     return Object.entries(map)
@@ -366,15 +431,23 @@ export function AnalyticsClient({
 
   const selectedChart = CHART_OPTIONS.find(o => o.value === chartType) ?? CHART_OPTIONS[0];
 
+  const { ref: chartBoxRef, size: chartBoxSize } = useElementSize<HTMLDivElement>({ width: 500, height: 220 });
+
   function renderChart() {
     const empty = (msg: string) => (
       <p className="text-sm text-gray-400 text-center py-10">{msg}</p>
     );
     switch (chartType) {
       case "rev_exp":
-        return <GroupedBarChart data={monthlyData} />;
+        return <GroupedBarChart data={monthlyData} width={chartBoxSize.width} height={chartBoxSize.height} />;
       case "cash_flow":
-        return <CashFlowChart data={monthlyData.map(d => ({ month: d.month, net: d.net }))} />;
+        return (
+          <CashFlowChart
+            data={monthlyData.map(d => ({ month: d.month, net: d.net }))}
+            width={chartBoxSize.width}
+            height={chartBoxSize.height}
+          />
+        );
       case "by_client":
         return byClientData.length > 0
           ? <HBarChart items={byClientData} />
@@ -492,9 +565,7 @@ export function AnalyticsClient({
                 />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Net Profit ({profitMargin.toFixed(0)}% margin)
-                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Net Profit</p>
                 <p
                   className={`text-xl font-bold ${
                     netProfit >= 0 ? "text-gray-900 dark:text-white" : "text-red-500"
@@ -573,7 +644,16 @@ export function AnalyticsClient({
             </div>
           </div>
         </CardHeader>
-        <CardContent>{renderChart()}</CardContent>
+        <CardContent>
+          <div
+            ref={chartBoxRef}
+            className="resize-y overflow-auto rounded-md border border-dashed border-transparent hover:border-gray-200 dark:hover:border-gray-700"
+            style={{ height: 260, minHeight: 160, maxHeight: 640 }}
+            title="Drag the bottom-right corner to resize"
+          >
+            {renderChart()}
+          </div>
+        </CardContent>
       </Card>
 
       {isFree && <AdBanner format="horizontal" className="mb-8" />}
