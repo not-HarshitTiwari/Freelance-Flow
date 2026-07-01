@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -141,6 +143,8 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const { id, content, status } = await request.json();
   const update: Record<string, string> = {};
@@ -164,6 +168,8 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { id } = await request.json();
   const { error } = await supabase.from("proposals").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

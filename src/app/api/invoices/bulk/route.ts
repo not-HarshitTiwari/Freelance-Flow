@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { applyStockChange, type StockItem } from "@/lib/stock";
 import { planAtLeast, type Plan } from "@/lib/plan-context";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STOCK_WARNING = "Invoices deleted, but some stock counts couldn't be restored automatically.";
@@ -19,6 +19,8 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   if (!(await requireAdvanced(supabase, ownerId))) {
     return NextResponse.json({ error: "Bulk actions require the Advanced plan." }, { status: 403 });
@@ -43,6 +45,8 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   if (!(await requireAdvanced(supabase, ownerId))) {
     return NextResponse.json({ error: "Bulk actions require the Advanced plan." }, { status: 403 });

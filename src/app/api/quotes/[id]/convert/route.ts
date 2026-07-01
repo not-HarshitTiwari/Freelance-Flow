@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -10,6 +10,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { id } = await params;
 
   const { data: quote, error: fetchError } = await supabase

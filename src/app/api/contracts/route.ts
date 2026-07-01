@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 export async function GET() {
   const supabase = await createClient();
@@ -17,6 +17,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   if (!profile?.plan || !["basic", "pro", "advanced"].includes(profile.plan)) {
@@ -37,6 +39,8 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const { id, title, client_name, client_email, body, status } = await request.json();
 
@@ -108,6 +112,8 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { id } = await request.json();
   const { error } = await supabase.from("contracts").delete().eq("id", id).eq("user_id", ownerId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

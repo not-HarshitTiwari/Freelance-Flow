@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 // POST — generate portal token for a client, optionally email the link
 export async function POST(req: Request) {
@@ -11,6 +11,8 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { clientId, sendEmail: doEmail } = await req.json();
   const token = randomBytes(32).toString("hex");
 

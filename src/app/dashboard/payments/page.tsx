@@ -9,6 +9,7 @@ type Payment = {
   id: string;
   amount: number;
   note: string | null;
+  method: string | null;
   paid_at: string;
   invoice_id: string;
   invoices: { invoice_number: string; customer_name: string | null; customer_company: string | null; total: number } | null;
@@ -134,6 +135,7 @@ export default function PaymentsPage() {
                   </p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
                     {new Date(p.paid_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    {p.method && ` • ${p.method}`}
                     {p.note && ` • ${p.note}`}
                   </p>
                 </div>

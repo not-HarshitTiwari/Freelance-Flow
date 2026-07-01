@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("payments")
-    .select("id, amount, note, paid_at, invoice_id, invoices(invoice_number, customer_name, customer_company, total)")
+    .select("id, amount, note, method, paid_at, invoice_id, invoices(invoice_number, customer_name, customer_company, total)")
     .eq("user_id", ownerId)
     .order("paid_at", { ascending: false });
 

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 import { isWhatsAppCloudConfigured, sendWhatsAppText, buildWaMeLink } from "@/lib/whatsapp";
 import { randomBytes } from "crypto";
 
@@ -10,6 +10,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { quoteId } = await request.json();
   if (!quoteId) return NextResponse.json({ error: "Missing quoteId" }, { status: 400 });
 

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
 import { calculateGst } from "@/lib/gst";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 const STOCK_WARNING = "Invoice saved, but some stock counts couldn't be updated automatically.";
 
@@ -13,6 +13,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const body = await request.json();
   const {
@@ -102,6 +104,8 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
 
   const body = await request.json();
   const {
@@ -171,6 +175,8 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
   const { id } = await request.json();
 
   const { data: existing } = await supabase.from("invoices").select("items").eq("id", id).eq("user_id", ownerId).single();

@@ -1,19 +1,29 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getWorkspaceOwnerId, getWorkspaceRole, canManageWorkspace } from "@/lib/team";
 
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  return NextResponse.json({ profile: data });
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+
+  const { data } = await supabase.from("profiles").select("*").eq("id", ownerId).single();
+  return NextResponse.json({ profile: data, role });
 }
 
 export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canManageWorkspace(role)) {
+    return NextResponse.json({ error: "Your role doesn't allow changing workspace settings." }, { status: 403 });
+  }
 
   const body = await request.json();
 
@@ -35,9 +45,13 @@ export async function PATCH(request: Request) {
     if (v !== undefined) updates[k] = v;
   }
 
+  // The profile row always exists (auto-created on signup) — a plain update
+  // keeps this within the "Admin members update workspace owner profile" RLS
+  // policy, which only covers UPDATE, not the INSERT half of an upsert.
   const { data, error } = await supabase
     .from("profiles")
-    .upsert({ id: user.id, ...updates }, { onConflict: "id" })
+    .update(updates)
+    .eq("id", ownerId)
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data: members, error } = await supabase
     .from("team_members")
-    .select("id, member_email, member_id, status, invited_at, accepted_at")
+    .select("id, member_email, member_id, status, role, invited_at, accepted_at")
     .eq("owner_id", user.id)
     .neq("status", "removed")
     .order("invited_at", { ascending: false });
@@ -32,10 +32,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Team invitations require the Advanced plan." }, { status: 403 });
   }
 
-  const { email } = await request.json();
+  const { email, role } = await request.json();
   if (!email || typeof email !== "string") {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
+  const memberRole = ["admin", "accountant", "viewer"].includes(role) ? role : "admin";
   const normalizedEmail = email.trim().toLowerCase();
   if (normalizedEmail === user.email?.toLowerCase()) {
     return NextResponse.json({ error: "You cannot invite yourself" }, { status: 400 });
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     // Refresh token for re-invite
     const { data: updated, error } = await supabase
       .from("team_members")
-      .update({ status: "pending", accepted_at: null })
+      .update({ status: "pending", accepted_at: null, role: memberRole })
       .eq("id", existing.id)
       .select("invite_token")
       .single();
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
   } else {
     const { data: inserted, error } = await supabase
       .from("team_members")
-      .insert({ owner_id: user.id, member_email: normalizedEmail })
+      .insert({ owner_id: user.id, member_email: normalizedEmail, role: memberRole })
       .select("invite_token")
       .single();
     if (error || !inserted) return NextResponse.json({ error: error?.message ?? "Failed to create invite" }, { status: 500 });
@@ -94,6 +95,27 @@ export async function POST(request: Request) {
     } catch { /* don't fail if email fails */ }
   }
 
+  return NextResponse.json({ ok: true });
+}
+
+// PATCH — owner changes a member's role
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { memberId, role } = await request.json();
+  if (!memberId || !["admin", "accountant", "viewer"].includes(role)) {
+    return NextResponse.json({ error: "memberId and a valid role are required" }, { status: 400 });
+  }
+
+  const { error } = await supabase
+    .from("team_members")
+    .update({ role })
+    .eq("id", memberId)
+    .eq("owner_id", user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
 

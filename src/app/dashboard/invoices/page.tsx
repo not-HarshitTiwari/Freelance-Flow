@@ -461,8 +461,7 @@ function InvoicesPageInner() {
   const [sending, setSending] = useState(false);
   const [sendRewardedOpen, setSendRewardedOpen] = useState(false);
   const [payTarget, setPayTarget] = useState<Invoice | null>(null);
-  const [payAmount, setPayAmount] = useState("");
-  const [payNote, setPayNote] = useState("");
+  const [paySplits, setPaySplits] = useState<{ amount: string; method: string; note: string }[]>([{ amount: "", method: "", note: "" }]);
   const [paying, setPaying] = useState(false);
   const [creditNoteTarget, setCreditNoteTarget] = useState<Invoice | null>(null);
   const [creditNoteAmount, setCreditNoteAmount] = useState("");
@@ -661,16 +660,31 @@ function InvoicesPageInner() {
     finally { setReminding(null); }
   }
 
+  function addPaySplit() {
+    setPaySplits(s => [...s, { amount: "", method: "", note: "" }]);
+  }
+
+  function removePaySplit(i: number) {
+    setPaySplits(s => s.filter((_, idx) => idx !== i));
+  }
+
+  function updatePaySplit(i: number, patch: Partial<{ amount: string; method: string; note: string }>) {
+    setPaySplits(s => s.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  }
+
   async function recordPayment(e: React.FormEvent) {
     e.preventDefault();
     if (!payTarget) return;
     setPaying(true);
     try {
-      const res = await fetch("/api/invoices/payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: payTarget.id, amount: parseFloat(payAmount), note: payNote }) });
+      const splits = paySplits
+        .map(s => ({ amount: parseFloat(s.amount), method: s.method || null, note: s.note || null }))
+        .filter(s => s.amount > 0);
+      const res = await fetch("/api/invoices/payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: payTarget.id, splits }) });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       toast.success("Payment recorded!");
-      setPayTarget(null); setPayAmount(""); setPayNote("");
+      setPayTarget(null); setPaySplits([{ amount: "", method: "", note: "" }]);
       fetchInvoices();
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to record payment"); }
     finally { setPaying(false); }
@@ -1289,7 +1303,7 @@ function InvoicesPageInner() {
                     </button>
                   )}
                   {inv.status !== "paid" && (
-                    <button onClick={() => { setPayTarget(inv); setPayAmount(String(inv.total - (inv.amount_paid ?? 0))); setPayNote(""); }} className="text-gray-400 hover:text-green-600" title="Record payment">
+                    <button onClick={() => { setPayTarget(inv); setPaySplits([{ amount: String(inv.total - (inv.amount_paid ?? 0)), method: "", note: "" }]); }} className="text-gray-400 hover:text-green-600" title="Record payment">
                       <IndianRupee size={15} />
                     </button>
                   )}
@@ -1787,13 +1801,33 @@ function InvoicesPageInner() {
             </div>
           )}
           <form onSubmit={recordPayment} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Amount Received (₹) *</Label>
-              <Input type="number" min={0.01} step={0.01} value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="Enter amount" required />
-            </div>
-            <div className="space-y-2">
-              <Label>Note (optional)</Label>
-              <Input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. UPI transfer, ref #12345" />
+            <div className="space-y-3">
+              {paySplits.map((split, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-start">
+                  <div className="space-y-1">
+                    {i === 0 && <Label className="text-xs">Amount (₹) *</Label>}
+                    <Input type="number" min={0.01} step={0.01} value={split.amount} onChange={e => updatePaySplit(i, { amount: e.target.value })} placeholder="Amount" required />
+                  </div>
+                  <div className="space-y-1">
+                    {i === 0 && <Label className="text-xs">Method</Label>}
+                    <select className={selectStyle} value={split.method} onChange={e => updatePaySplit(i, { method: e.target.value })}>
+                      <option value="">— optional —</option>
+                      {PAYMENT_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  {paySplits.length > 1 && (
+                    <button type="button" onClick={() => removePaySplit(i)} className={`text-red-400 hover:text-red-600 ${i === 0 ? "mt-6" : ""}`} title="Remove split">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={addPaySplit} className="text-xs text-violet-600 hover:underline dark:text-violet-400">
+                + Split across another method
+              </button>
+              <p className="text-xs text-gray-400">
+                Total: ₹{paySplits.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toLocaleString("en-IN")}
+              </p>
             </div>
             <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white" disabled={paying}>
               {paying ? "Saving..." : "Record Payment"}

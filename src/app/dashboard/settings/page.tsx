@@ -57,12 +57,14 @@ function buildPreview(fmt: InvNumFmt): string {
   return parts.join(fmt.inv_separator || "-");
 }
 
-type TeamMember = { id: string; member_email: string; member_id: string | null; status: string; invited_at: string; accepted_at: string | null };
+type TeamMember = { id: string; member_email: string; member_id: string | null; status: string; role: string; invited_at: string; accepted_at: string | null };
 
 export default function SettingsPage() {
   const plan = usePlan();
   const canSetCadence = planAtLeast(plan, "pro");
   const canManageTeam = planAtLeast(plan, "advanced");
+  const [workspaceRole, setWorkspaceRole] = useState<string>("owner");
+  const canEditSettings = workspaceRole === "owner" || workspaceRole === "admin";
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -83,6 +85,7 @@ export default function SettingsPage() {
   // Team state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("admin");
   const [inviting, setInviting] = useState(false);
 
   // Logo state
@@ -102,7 +105,8 @@ export default function SettingsPage() {
     setPdfTemplate((localStorage.getItem("inv_template") as PdfTemplate) || "classic");
     setPdfColor(localStorage.getItem("inv_color") || "#7c3aed");
     setCurrency(localStorage.getItem("inv_currency") || "INR");
-    fetch("/api/profile").then(r => r.json()).then(({ profile }) => {
+    fetch("/api/profile").then(r => r.json()).then(({ profile, role }) => {
+      if (role) setWorkspaceRole(role);
       if (profile) {
         setForm({
           full_name: profile.full_name || "",
@@ -146,7 +150,7 @@ export default function SettingsPage() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      const res = await fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim() }) });
+      const res = await fetch("/api/team", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(`Invite sent to ${inviteEmail.trim()}`);
@@ -154,6 +158,15 @@ export default function SettingsPage() {
       fetch("/api/team").then(r => r.json()).then(({ members }) => { if (members) setTeamMembers(members); });
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send invite"); }
     finally { setInviting(false); }
+  }
+
+  async function changeRole(memberId: string, role: string) {
+    const previous = teamMembers;
+    setTeamMembers(ms => ms.map(m => (m.id === memberId ? { ...m, role } : m)));
+    const res = await fetch("/api/team", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId, role }) });
+    const data = await res.json();
+    if (!res.ok) { toast.error(data.error); setTeamMembers(previous); return; }
+    toast.success("Role updated");
   }
 
   async function removeMember(memberId: string) {
@@ -304,7 +317,14 @@ export default function SettingsPage() {
     <div className="max-w-xl space-y-6">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Business Settings</h1>
 
+      {!canEditSettings && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-300">
+          Your role ({workspaceRole}) has read-only access to workspace settings. Ask the owner or an admin to make changes.
+        </p>
+      )}
+
       <form onSubmit={handleSave} className="space-y-5">
+        <fieldset disabled={!canEditSettings} className="space-y-5">
 
         {/* Business Info */}
         <Card>
@@ -501,6 +521,7 @@ export default function SettingsPage() {
         <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
           {saving ? "Saving..." : "Save Settings"}
         </Button>
+        </fieldset>
       </form>
 
       {/* Invoice Number Format — outside the main form so it has its own save */}
@@ -589,7 +610,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <Button type="button" onClick={saveInvFmt} disabled={savingInvFmt} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
+          <Button type="button" onClick={saveInvFmt} disabled={savingInvFmt || !canEditSettings} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
             {savingInvFmt ? "Saving..." : "Save Invoice Numbering"}
           </Button>
         </CardContent>
@@ -623,7 +644,7 @@ export default function SettingsPage() {
           <Button
             type="button"
             onClick={saveReminderCadence}
-            disabled={!canSetCadence || savingCadence}
+            disabled={!canSetCadence || savingCadence || !canEditSettings}
             className="w-full bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50"
           >
             {savingCadence ? "Saving..." : canSetCadence ? "Save Reminder Cadence" : "Pro plan required"}
@@ -657,11 +678,24 @@ export default function SettingsPage() {
                   disabled={inviting}
                   className="flex-1"
                 />
+                <select
+                  value={inviteRole}
+                  onChange={e => setInviteRole(e.target.value)}
+                  disabled={inviting}
+                  className="h-9 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none shrink-0"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="accountant">Accountant</option>
+                  <option value="viewer">Viewer</option>
+                </select>
                 <Button type="submit" disabled={inviting || !inviteEmail.trim()} className="bg-violet-600 hover:bg-violet-700 text-white shrink-0">
                   <UserPlus className="h-4 w-4 mr-1.5" />
                   {inviting ? "Sending…" : "Invite"}
                 </Button>
               </form>
+              <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+                Admin: full access. Accountant: everyday work, no team/settings. Viewer: read-only everywhere.
+              </p>
               {teamMembers.length === 0 ? (
                 <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">No team members yet. Invite someone above.</p>
               ) : (
@@ -672,6 +706,15 @@ export default function SettingsPage() {
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{m.member_email}</p>
                         <p className="text-xs text-gray-400 capitalize">{m.status}</p>
                       </div>
+                      <select
+                        value={m.role}
+                        onChange={e => changeRole(m.id, e.target.value)}
+                        className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-xs outline-none shrink-0"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="accountant">Accountant</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
                       <Button
                         variant="ghost"
                         size="icon"

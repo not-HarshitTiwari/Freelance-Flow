@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getWorkspaceOwnerId } from "@/lib/team";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
+
+type Split = { amount: number; method?: string | null; note?: string | null };
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -8,8 +10,21 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ownerId = await getWorkspaceOwnerId(supabase, user.id);
-  const { invoiceId, amount, note } = await request.json();
-  if (!amount || amount <= 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow recording payments." }, { status: 403 });
+
+  const body = await request.json();
+  const { invoiceId, amount, note, method, splits } = body;
+
+  const rawSplits: Split[] = Array.isArray(splits) && splits.length > 0
+    ? splits
+    : [{ amount: parseFloat(amount), method: method || null, note: note || null }];
+
+  const parsedSplits = rawSplits
+    .map(s => ({ amount: parseFloat(String(s.amount)), method: s.method || null, note: s.note || null }))
+    .filter(s => s.amount > 0);
+
+  if (parsedSplits.length === 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
 
   const { data: invoice } = await supabase
     .from("invoices")
@@ -20,15 +35,16 @@ export async function POST(request: Request) {
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-  const newAmountPaid = Math.min((invoice.amount_paid ?? 0) + parseFloat(amount), invoice.total);
+  const splitTotal = parsedSplits.reduce((s, p) => s + p.amount, 0);
+  const newAmountPaid = Math.min((invoice.amount_paid ?? 0) + splitTotal, invoice.total);
   const newStatus = newAmountPaid >= invoice.total ? "paid" : "partial";
 
   // Append to payment history instead of overwriting
   const dateStr = new Date().toLocaleDateString("en-IN");
-  const newEntry = `${dateStr}: ₹${parseFloat(amount).toLocaleString("en-IN")}${note ? ` — ${note}` : ""}`;
+  const entryLines = parsedSplits.map(s => `${dateStr}: ₹${s.amount.toLocaleString("en-IN")}${s.method ? ` via ${s.method}` : ""}${s.note ? ` — ${s.note}` : ""}`);
   const updatedNote = invoice.payment_note
-    ? `${invoice.payment_note}\n${newEntry}`
-    : newEntry;
+    ? `${invoice.payment_note}\n${entryLines.join("\n")}`
+    : entryLines.join("\n");
 
   const { data, error } = await supabase
     .from("invoices")
@@ -44,12 +60,15 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await supabase.from("payments").insert({
-    user_id: ownerId,
-    invoice_id: invoiceId,
-    amount: parseFloat(amount),
-    note: note || null,
-  });
+  await supabase.from("payments").insert(
+    parsedSplits.map(s => ({
+      user_id: ownerId,
+      invoice_id: invoiceId,
+      amount: s.amount,
+      method: s.method,
+      note: s.note,
+    }))
+  );
 
   return NextResponse.json({ invoice: data });
 }
