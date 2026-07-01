@@ -770,7 +770,16 @@ function InvoicesPageInner() {
   }
 
   async function markPaid(inv: Invoice) {
-    await fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: inv.id, status: "paid", amount_paid: inv.total }) });
+    const remaining = inv.total - (inv.amount_paid ?? 0);
+    if (remaining > 0) {
+      await fetch("/api/invoices/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: inv.id, amount: remaining, note: "Marked as fully paid" }),
+      });
+    } else {
+      await fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: inv.id, status: "paid", amount_paid: inv.total }) });
+    }
     toast.success("Marked as paid!");
     fetchInvoices();
   }
@@ -1275,7 +1284,7 @@ function InvoicesPageInner() {
       {/* View Invoice Dialog */}
       {selected && (
         <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-          <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+          <DialogContent className="max-w-4xl w-full p-0 overflow-hidden">
             <div className="flex flex-col max-h-[90vh]">
             <div className="px-6 pt-6 pb-2 border-b dark:border-gray-700 shrink-0">
               <DialogHeader><DialogTitle>{selected.invoice_number}</DialogTitle></DialogHeader>

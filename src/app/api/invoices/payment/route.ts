@@ -43,5 +43,13 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await supabase.from("payments").insert({
+    user_id: ownerId,
+    invoice_id: invoiceId,
+    amount: parseFloat(amount),
+    note: note || null,
+  });
+
   return NextResponse.json({ invoice: data });
 }

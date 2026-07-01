@@ -23,6 +23,7 @@ import {
   Package,
   BarChart3,
   FileSpreadsheet,
+  CreditCard,
 } from "lucide-react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/dashboard/proposals", label: "Proposals", icon: FileText },
   { href: "/dashboard/quotes", label: "Quotes", icon: FileSpreadsheet },
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
+  { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/products", label: "Products & Services", icon: Package },
   { href: "/dashboard/expenses", label: "Expenses", icon: Wallet },
