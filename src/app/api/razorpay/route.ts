@@ -15,7 +15,7 @@ export async function POST() {
   try {
     // Create a Razorpay subscription plan (₹999/month)
     const subscription = await razorpay.subscriptions.create({
-      plan_id: process.env.RAZORPAY_PLAN_ID!,
+      plan_id: process.env.RAZORPAY_PRO_PLAN_ID!,
       customer_notify: 1,
       quantity: 1,
       total_count: 12,

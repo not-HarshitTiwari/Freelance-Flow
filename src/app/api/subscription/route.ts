@@ -9,7 +9,7 @@ const razorpay = new Razorpay({
 
 const PLAN_IDS: Record<string, string | undefined> = {
   basic: process.env.RAZORPAY_BASIC_PLAN_ID,
-  pro: process.env.RAZORPAY_PRO_PLAN_ID || process.env.RAZORPAY_PLAN_ID,
+  pro: process.env.RAZORPAY_PRO_PLAN_ID,
   advanced: process.env.RAZORPAY_ADVANCED_PLAN_ID,
 };
 
