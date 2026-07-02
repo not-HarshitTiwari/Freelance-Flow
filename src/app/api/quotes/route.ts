@@ -18,9 +18,10 @@ export async function POST(request: Request) {
     client_id, items, gst_type, gst_rate, valid_until, notes, terms,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
+    vat_rate,
   } = body;
 
-  const { subtotal, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
+  const { subtotal, cgst, sgst, igst, vatAmount, total } = calculateGst(items, gst_type, gst_rate);
   const quoteNumber = await generateQuoteNumber(supabase, ownerId);
 
   const { data, error } = await supabase.from("quotes").insert({
@@ -40,6 +41,8 @@ export async function POST(request: Request) {
     customer_name, customer_company, customer_address, customer_gstin,
     customer_email: customer_email || null,
     customer_phone: customer_phone || null,
+    vat_rate: parseFloat(vat_rate) || 0,
+    vat_amount: vatAmount,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -76,6 +79,7 @@ export async function PATCH(request: Request) {
     id, quote_number, client_id, items, gst_type, gst_rate, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
+    vat_rate,
   } = body;
 
   const updates: Record<string, unknown> = {};
@@ -84,11 +88,12 @@ export async function PATCH(request: Request) {
     client_id, valid_until, notes, terms, status,
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
+    vat_rate: vat_rate !== undefined ? parseFloat(vat_rate) || 0 : undefined,
   };
 
   if (items !== undefined) {
-    const { subtotal, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
-    Object.assign(allowed, { items, gst_type, gst_rate, subtotal, cgst, sgst, igst, total });
+    const { subtotal, cgst, sgst, igst, vatAmount, total } = calculateGst(items, gst_type, gst_rate);
+    Object.assign(allowed, { items, gst_type, gst_rate, subtotal, cgst, sgst, igst, vat_amount: vatAmount, total });
   }
 
   for (const [k, v] of Object.entries(allowed)) {

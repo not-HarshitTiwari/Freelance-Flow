@@ -16,7 +16,7 @@ import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 
-type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string; product_id?: string };
+type InvoiceItem = { description: string; quantity: number; rate: number; hsn_code?: string; product_id?: string; discount_pct?: number };
 
 type Product = {
   id: string;
@@ -72,6 +72,11 @@ type Invoice = {
   customer_address: string | null;
   customer_gstin: string | null;
   whatsapp_sent_at: string | null;
+  invoice_type: string | null;
+  tds_pct: number | null;
+  tds_amount: number | null;
+  vat_rate: number | null;
+  vat_amount: number | null;
   created_at: string;
 };
 
@@ -168,13 +173,15 @@ async function buildInvoicePdf(
   const black: RGB = [30, 30, 30];
   const white: RGB = [255, 255, 255];
 
+  const docTitle = inv.invoice_type === "proforma" ? "PROFORMA INVOICE" : "INVOICE";
+
   // ── HEADER by template ──────────────────────────────────────
   if (template === "bold") {
     // Full-width dark sidebar + big number on right
     const col = accent ?? ([30, 30, 30] as RGB);
     doc.setFillColor(...col); doc.rect(0, 0, 210, 42, "F");
-    doc.setTextColor(...white); doc.setFont("helvetica", "bold"); doc.setFontSize(26);
-    doc.text("INVOICE", 14, 26);
+    doc.setTextColor(...white); doc.setFont("helvetica", "bold"); doc.setFontSize(inv.invoice_type === "proforma" ? 18 : 26);
+    doc.text(docTitle, 14, 26);
     doc.setFontSize(9); doc.setFont("helvetica", "normal");
     doc.text(`#${inv.invoice_number}`, 14, 35);
     doc.text(`Date: ${inv.invoice_date || ""}`, 140, 18);
@@ -184,7 +191,7 @@ async function buildInvoicePdf(
   } else if (template === "minimal") {
     // No color, just text with bottom border
     doc.setTextColor(...black); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
-    doc.text("INVOICE", 14, 20);
+    doc.text(docTitle, 14, 20);
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(...gray);
     doc.text(`#${inv.invoice_number}`, 14, 27);
     doc.text(`${inv.invoice_date || ""}`, 140, 16);
@@ -195,7 +202,7 @@ async function buildInvoicePdf(
     // Classic — accent header band
     if (accent) { doc.setFillColor(...accent); doc.rect(0, 0, 210, 28, "F"); doc.setTextColor(...white); }
     else { doc.setDrawColor(220, 220, 220); doc.rect(0, 0, 210, 28, "S"); doc.setTextColor(...black); }
-    doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.text("INVOICE", 14, 18);
+    doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.text(docTitle, 14, 18);
     doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`#${inv.invoice_number}`, 14, 24);
     doc.setFontSize(9);
     doc.text(`Date: ${inv.invoice_date || ""}`, 140, 14);
@@ -219,27 +226,48 @@ async function buildInvoicePdf(
   customer.forEach((line, i) => doc.text(line, 110, bodyStart + 7 + i * 5));
 
   // ── ITEMS TABLE ──────────────────────────────────────────────
+  const hasDiscounts = inv.items.some(item => (item.discount_pct || 0) > 0);
   const tableStartY = bodyStart + Math.max(seller.length, customer.length) * 5 + 14;
   autoTable(doc, {
     startY: tableStartY,
-    head: [["#", "Description", "HSN/SAC", "Qty", `Rate (${sym})`, `Amount (${sym})`]],
-    body: inv.items.map((item, i) => [i + 1, item.description, item.hsn_code || "—", item.quantity, fmt(item.rate), fmt(item.quantity * item.rate)]),
+    head: [hasDiscounts
+      ? ["#", "Description", "HSN/SAC", "Qty", `Rate (${sym})`, "Disc%", `Amount (${sym})`]
+      : ["#", "Description", "HSN/SAC", "Qty", `Rate (${sym})`, `Amount (${sym})`]],
+    body: inv.items.map((item, i) => {
+      const gross = item.quantity * item.rate;
+      const net = gross * (1 - (item.discount_pct || 0) / 100);
+      return hasDiscounts
+        ? [i + 1, item.description, item.hsn_code || "—", item.quantity, fmt(item.rate), item.discount_pct ? `${item.discount_pct}%` : "—", fmt(net)]
+        : [i + 1, item.description, item.hsn_code || "—", item.quantity, fmt(item.rate), fmt(gross)];
+    }),
     headStyles: { fillColor: accent ?? (template === "bold" ? [30,30,30] : [240,240,240]), textColor: (accent || template === "bold") ? white : black, fontSize: 9 },
     bodyStyles: { fontSize: 9 },
     alternateRowStyles: template === "minimal" ? { fillColor: [250,250,250] } : {},
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 20 }, 3: { cellWidth: 12 }, 4: { cellWidth: 28 }, 5: { cellWidth: 30 } },
+    columnStyles: hasDiscounts
+      ? { 0: { cellWidth: 8 }, 2: { cellWidth: 18 }, 3: { cellWidth: 10 }, 4: { cellWidth: 22 }, 5: { cellWidth: 14 }, 6: { cellWidth: 24 } }
+      : { 0: { cellWidth: 8 }, 2: { cellWidth: 20 }, 3: { cellWidth: 12 }, 4: { cellWidth: 28 }, 5: { cellWidth: 30 } },
   });
 
   // ── TOTALS ───────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalY = (doc as any).lastAutoTable.finalY + 8;
   const summaryX = 120;
-  const rows = [
-    ["Subtotal", `${sym}${fmt(inv.subtotal)}`],
-    ...(inv.gst_type === "cgst_sgst"
-      ? [[`CGST (${(inv.gst_rate||0)/2}%)`, `${sym}${fmt(inv.cgst||0)}`], [`SGST (${(inv.gst_rate||0)/2}%)`, `${sym}${fmt(inv.sgst||0)}`]]
-      : [[`IGST (${inv.gst_rate||0}%)`, `${sym}${fmt(inv.igst||0)}`]]),
-  ];
+  const pdfGrossSubtotal = inv.items.reduce((s, item) => s + item.quantity * item.rate, 0);
+  const pdfDiscountTotal = pdfGrossSubtotal - inv.subtotal;
+  const rows: string[][] = [];
+  if (hasDiscounts && pdfDiscountTotal > 0) {
+    rows.push(["Gross Subtotal", `${sym}${fmt(pdfGrossSubtotal)}`]);
+    rows.push(["Discount", `-${sym}${fmt(pdfDiscountTotal)}`]);
+  }
+  rows.push(["Subtotal", `${sym}${fmt(inv.subtotal)}`]);
+  if (inv.gst_type === "vat" && (inv.vat_amount || 0) > 0) {
+    rows.push([`VAT (${inv.vat_rate || 0}%)`, `${sym}${fmt(inv.vat_amount || 0)}`]);
+  } else if (inv.gst_type === "cgst_sgst") {
+    rows.push([`CGST (${(inv.gst_rate||0)/2}%)`, `${sym}${fmt(inv.cgst||0)}`]);
+    rows.push([`SGST (${(inv.gst_rate||0)/2}%)`, `${sym}${fmt(inv.sgst||0)}`]);
+  } else if (inv.gst_type === "igst") {
+    rows.push([`IGST (${inv.gst_rate||0}%)`, `${sym}${fmt(inv.igst||0)}`]);
+  }
   rows.forEach(([label, value], i) => {
     doc.setFontSize(9); doc.setTextColor(...gray); doc.setFont("helvetica", "normal");
     doc.text(label, summaryX, finalY + i * 6);
@@ -255,6 +283,16 @@ async function buildInvoicePdf(
   doc.text(`${sym}${fmt(inv.total)}`, 195, totalY + 3, { align: "right" });
 
   let infoY = totalY + 16;
+
+  if ((inv.tds_amount || 0) > 0) {
+    doc.setFontSize(9); doc.setTextColor(...gray); doc.setFont("helvetica", "normal");
+    doc.text(`TDS Deduction (${inv.tds_pct || 0}%)`, summaryX, infoY - 8);
+    doc.text(`-${sym}${fmt(inv.tds_amount || 0)}`, 195, infoY - 8, { align: "right" });
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...black);
+    doc.text("Net Payable", summaryX, infoY - 2);
+    doc.text(`${sym}${fmt(inv.total - (inv.tds_amount || 0))}`, 195, infoY - 2, { align: "right" });
+    infoY += 6;
+  }
   const methods = inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [];
   if (methods.length || inv.upi_id || inv.bank_account_number || inv.transaction_id) {
     doc.setTextColor(...black); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
@@ -363,6 +401,10 @@ const emptyForm = {
   due_date: "",
   gst_type: "cgst_sgst",
   gst_rate: "18",
+  tax_mode: "gst" as "gst" | "vat",
+  vat_rate: "0",
+  tds_pct: "0",
+  is_proforma: false,
   payment_methods: [] as string[],
   transaction_id: "",
   upi_id: "",
@@ -590,9 +632,14 @@ function InvoicesPageInner() {
     toast.success("Saved to your catalog");
   }
 
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.rate, 0);
-  const gstAmt = (subtotal * parseFloat(form.gst_rate || "0")) / 100;
-  const total = subtotal + gstAmt;
+  const grossSubtotal = items.reduce((s, i) => s + i.quantity * i.rate, 0);
+  const discountTotal = items.reduce((s, i) => s + i.quantity * i.rate * ((i.discount_pct || 0) / 100), 0);
+  const subtotal = grossSubtotal - discountTotal;
+  const gstAmt = form.tax_mode === "gst" ? (subtotal * parseFloat(form.gst_rate || "0")) / 100 : 0;
+  const vatAmt = form.tax_mode === "vat" ? (subtotal * parseFloat(form.vat_rate || "0")) / 100 : 0;
+  const tdsAmt = (subtotal * parseFloat(form.tds_pct || "0")) / 100;
+  const total = subtotal + gstAmt + vatAmt;
+  const netPayable = total - tdsAmt;
   const halfGst = gstAmt / 2;
 
   const hasUPI = form.payment_methods.includes("UPI");
@@ -743,12 +790,17 @@ function InvoicesPageInner() {
 
   async function duplicateInvoice(inv: Invoice) {
     setItems(inv.items.map(i => ({ ...i })));
+    const isVat = inv.gst_type === "vat" || (inv.vat_rate && inv.vat_rate > 0);
     setForm(f => ({
       ...f,
       invoice_date: new Date().toISOString().split("T")[0],
       due_date: "",
-      gst_type: inv.gst_type || "cgst_sgst",
-      gst_rate: String(inv.gst_rate ?? "18"),
+      gst_type: isVat ? "cgst_sgst" : (inv.gst_type || "cgst_sgst"),
+      gst_rate: isVat ? "18" : String(inv.gst_rate ?? "18"),
+      tax_mode: isVat ? "vat" : "gst",
+      vat_rate: String(inv.vat_rate ?? "0"),
+      tds_pct: String(inv.tds_pct ?? "0"),
+      is_proforma: inv.invoice_type === "proforma",
       payment_methods: inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [],
       notes: inv.notes || "",
       terms: inv.terms || "",
@@ -785,16 +837,22 @@ function InvoicesPageInner() {
       else if (form.recurrence_interval === "quarterly") nextDate.setMonth(nextDate.getMonth() + 3);
       else nextDate.setMonth(nextDate.getMonth() + 1);
 
+      const effectiveGstType = form.tax_mode === "vat" ? "vat" : form.gst_type;
+      const effectiveGstRate = form.tax_mode === "vat" ? parseFloat(form.vat_rate) : parseFloat(form.gst_rate);
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          gst_rate: parseFloat(form.gst_rate),
+          gst_type: effectiveGstType,
+          gst_rate: effectiveGstRate,
           items,
           is_recurring: form.is_recurring,
           recurrence_interval: form.is_recurring ? form.recurrence_interval : null,
           next_invoice_date: form.is_recurring ? nextDate.toISOString().split("T")[0] : null,
+          invoice_type: form.is_proforma ? "proforma" : "invoice",
+          tds_pct: parseFloat(form.tds_pct) || 0,
+          vat_rate: form.tax_mode === "vat" ? parseFloat(form.vat_rate) : 0,
         }),
       });
       const data = await res.json();
@@ -838,11 +896,16 @@ function InvoicesPageInner() {
   function openEdit(inv: Invoice) {
     setEditTarget(inv);
     setEditItems(inv.items.map(i => ({ ...i })));
+    const isVat = inv.gst_type === "vat" || (inv.vat_rate && inv.vat_rate > 0);
     setEditForm({
       invoice_date: inv.invoice_date || "",
       due_date: inv.due_date || "",
-      gst_type: inv.gst_type || "cgst_sgst",
-      gst_rate: String(inv.gst_rate ?? "18"),
+      gst_type: isVat ? "cgst_sgst" : (inv.gst_type || "cgst_sgst"),
+      gst_rate: isVat ? "18" : String(inv.gst_rate ?? "18"),
+      tax_mode: isVat ? "vat" : "gst",
+      vat_rate: String(inv.vat_rate ?? "0"),
+      tds_pct: String(inv.tds_pct ?? "0"),
+      is_proforma: inv.invoice_type === "proforma",
       payment_methods: inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [],
       transaction_id: inv.transaction_id || "",
       upi_id: inv.upi_id || "",
@@ -873,13 +936,20 @@ function InvoicesPageInner() {
     if (!editTarget) return;
     setEditSaving(true);
     try {
-      const gst_rate = parseFloat(editForm.gst_rate);
-      const subtotal = editItems.reduce((s, i) => s + i.quantity * i.rate, 0);
-      const totalGst = (subtotal * gst_rate) / 100;
-      const cgst = editForm.gst_type === "cgst_sgst" ? totalGst / 2 : 0;
-      const sgst = editForm.gst_type === "cgst_sgst" ? totalGst / 2 : 0;
-      const igst = editForm.gst_type === "igst" ? totalGst : 0;
-      const total = subtotal + totalGst;
+      const taxMode = editForm.tax_mode;
+      const editGrossSubtotal = editItems.reduce((s, i) => s + i.quantity * i.rate, 0);
+      const editDiscountTotal = editItems.reduce((s, i) => s + i.quantity * i.rate * ((i.discount_pct || 0) / 100), 0);
+      const subtotal = editGrossSubtotal - editDiscountTotal;
+      const gst_rate = taxMode === "vat" ? parseFloat(editForm.vat_rate || "0") : parseFloat(editForm.gst_rate);
+      const effectiveGstType = taxMode === "vat" ? "vat" : editForm.gst_type;
+      const totalGst = taxMode === "gst" ? (subtotal * parseFloat(editForm.gst_rate)) / 100 : 0;
+      const vatAmount = taxMode === "vat" ? (subtotal * parseFloat(editForm.vat_rate || "0")) / 100 : 0;
+      const cgst = effectiveGstType === "cgst_sgst" ? totalGst / 2 : 0;
+      const sgst = effectiveGstType === "cgst_sgst" ? totalGst / 2 : 0;
+      const igst = effectiveGstType === "igst" ? totalGst : 0;
+      const total = subtotal + totalGst + vatAmount;
+      const tdsPct = parseFloat(editForm.tds_pct || "0");
+      const tdsAmount = (subtotal * tdsPct) / 100;
 
       const res = await fetch("/api/invoices", {
         method: "PATCH",
@@ -887,9 +957,15 @@ function InvoicesPageInner() {
         body: JSON.stringify({
           id: editTarget.id,
           ...editForm,
+          gst_type: effectiveGstType,
           gst_rate,
           items: editItems,
           subtotal, tax: totalGst, cgst, sgst, igst, total,
+          vat_rate: taxMode === "vat" ? parseFloat(editForm.vat_rate || "0") : 0,
+          vat_amount: vatAmount,
+          tds_pct: tdsPct,
+          tds_amount: tdsAmount,
+          invoice_type: editForm.is_proforma ? "proforma" : "invoice",
           payment_method: editForm.payment_methods.join(", ") || null,
           due_date: editForm.due_date || null,
           upi_id: editForm.upi_id || null,
@@ -1043,7 +1119,7 @@ function InvoicesPageInner() {
                   return (
                     <div key={i}>
                       <div className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <ProductPicker
                             value={item.description}
                             products={products}
@@ -1052,9 +1128,10 @@ function InvoicesPageInner() {
                           />
                         </div>
                         <div className="col-span-2"><Input placeholder="HSN/SAC" value={item.hsn_code || ""} onChange={e => updateItem(i, "hsn_code", e.target.value)} /></div>
-                        <div className="col-span-2"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={e => updateItem(i, "quantity", parseInt(e.target.value) || 1)} /></div>
+                        <div className="col-span-1"><Input type="number" placeholder="Qty" min={1} value={item.quantity} onChange={e => updateItem(i, "quantity", parseInt(e.target.value) || 1)} /></div>
                         <div className="col-span-2"><Input type="number" placeholder="Rate ₹" min={0} value={item.rate} onChange={e => updateItem(i, "rate", parseFloat(e.target.value) || 0)} /></div>
-                        <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity * item.rate).toLocaleString("en-IN")}</div>
+                        <div className="col-span-2"><Input type="number" placeholder="Disc%" min={0} max={100} value={item.discount_pct || ""} onChange={e => updateItem(i, "discount_pct", parseFloat(e.target.value) || 0)} /></div>
+                        <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity * item.rate * (1 - (item.discount_pct || 0) / 100)).toLocaleString("en-IN")}</div>
                         <div className="col-span-1 flex justify-end"><button type="button" onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button></div>
                       </div>
                       {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
@@ -1075,35 +1152,83 @@ function InvoicesPageInner() {
 
               {/* Tax */}
               <div className={sectionStyle}>
-                <p className={sectionTitle}>Tax Details</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>GST Type</Label>
-                    <select value={form.gst_type} onChange={e => setForm({ ...form, gst_type: e.target.value })} className={selectStyle}>
-                      <option value="cgst_sgst">CGST + SGST (Intra-state)</option>
-                      <option value="igst">IGST (Inter-state)</option>
-                      <option value="none">No GST</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>GST Rate (%)</Label>
-                    <select value={form.gst_rate} onChange={e => setForm({ ...form, gst_rate: e.target.value })} className={selectStyle}>
-                      <option value="0">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
+                <div className="flex items-center justify-between mb-3">
+                  <p className={sectionTitle}>Tax Details</p>
+                  <div className="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+                    {(["gst", "vat"] as const).map(m => (
+                      <button key={m} type="button" onClick={() => setForm(f => ({ ...f, tax_mode: m }))}
+                        className={`px-3 py-1 font-medium uppercase transition-colors ${form.tax_mode === m ? "bg-violet-600 text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                        {m}
+                      </button>
+                    ))}
                   </div>
                 </div>
+                {form.tax_mode === "gst" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>GST Type</Label>
+                      <select value={form.gst_type} onChange={e => setForm({ ...form, gst_type: e.target.value })} className={selectStyle}>
+                        <option value="cgst_sgst">CGST + SGST (Intra-state)</option>
+                        <option value="igst">IGST (Inter-state)</option>
+                        <option value="none">No GST</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>GST Rate (%)</Label>
+                      <select value={form.gst_rate} onChange={e => setForm({ ...form, gst_rate: e.target.value })} className={selectStyle}>
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label>VAT Rate (%)</Label>
+                    <input type="number" min={0} max={100} step={0.5} placeholder="e.g. 5" value={form.vat_rate}
+                      onChange={e => setForm(f => ({ ...f, vat_rate: e.target.value }))}
+                      className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none" />
+                  </div>
+                )}
+                <div className="space-y-1.5 mt-3">
+                  <Label>TDS Deduction (%)</Label>
+                  <input type="number" min={0} max={100} step={0.1} placeholder="0" value={form.tds_pct}
+                    onChange={e => setForm(f => ({ ...f, tds_pct: e.target.value }))}
+                    className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none" />
+                </div>
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1.5 mt-2">
+                  {discountTotal > 0 && <>
+                    <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Gross</span><span>₹{grossSubtotal.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between text-red-500"><span>Discount</span><span>-₹{discountTotal.toLocaleString("en-IN")}</span></div>
+                  </>}
                   <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
-                  {form.gst_type === "cgst_sgst" && <>
+                  {form.tax_mode === "gst" && form.gst_type === "cgst_sgst" && <>
                     <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
                     <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({parseFloat(form.gst_rate) / 2}%)</span><span>₹{halfGst.toLocaleString("en-IN")}</span></div>
                   </>}
-                  {form.gst_type === "igst" && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({form.gst_rate}%)</span><span>₹{gstAmt.toLocaleString("en-IN")}</span></div>}
+                  {form.tax_mode === "gst" && form.gst_type === "igst" && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({form.gst_rate}%)</span><span>₹{gstAmt.toLocaleString("en-IN")}</span></div>}
+                  {form.tax_mode === "vat" && vatAmt > 0 && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>VAT ({form.vat_rate}%)</span><span>₹{vatAmt.toLocaleString("en-IN")}</span></div>}
                   <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1.5"><span>Grand Total</span><span>₹{total.toLocaleString("en-IN")}</span></div>
+                  {tdsAmt > 0 && <>
+                    <div className="flex justify-between text-orange-600 dark:text-orange-400"><span>TDS ({form.tds_pct}%)</span><span>-₹{tdsAmt.toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between font-semibold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1.5"><span>Net Payable</span><span>₹{netPayable.toLocaleString("en-IN")}</span></div>
+                  </>}
+                </div>
+              </div>
+
+              {/* Proforma toggle */}
+              <div className={sectionStyle}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={sectionTitle}>Proforma Invoice</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Issue an estimate/proforma — excluded from revenue reports</p>
+                  </div>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, is_proforma: !f.is_proforma }))}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${form.is_proforma ? "bg-violet-600" : "bg-gray-300 dark:bg-gray-600"}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.is_proforma ? "translate-x-5" : ""}`} />
+                  </button>
                 </div>
               </div>
 
@@ -1279,6 +1404,7 @@ function InvoicesPageInner() {
                       <p className="text-xs text-blue-500">₹{(inv.amount_paid ?? 0).toLocaleString("en-IN")} paid</p>
                     )}
                   </div>
+                  {inv.invoice_type === "proforma" && <Badge className="bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300">Proforma</Badge>}
                   <Badge className={statusColors[inv.status] || ""}>{inv.status}</Badge>
                   {inv.is_recurring && (
                     <span title={inv.next_invoice_date ? `Next: ${new Date(inv.next_invoice_date).toLocaleDateString("en-IN")}` : "Recurring"} className="flex items-center gap-1 text-xs text-violet-400">
@@ -1366,7 +1492,9 @@ function InvoicesPageInner() {
                 {/* Header */}
                 <div className="flex justify-between items-start pb-4 border-b dark:border-gray-700">
                   <div>
-                    <p className="text-lg font-bold" style={{ color: pdfColor && pdfColor !== "none" ? pdfColor : undefined }}>INVOICE</p>
+                    <p className="text-lg font-bold" style={{ color: pdfColor && pdfColor !== "none" ? pdfColor : undefined }}>
+                      {selected.invoice_type === "proforma" ? "PROFORMA INVOICE" : "INVOICE"}
+                    </p>
                     <p className="text-gray-500">#{selected.invoice_number}</p>
                   </div>
                   <div className="text-right text-gray-500 space-y-0.5">
@@ -1392,9 +1520,12 @@ function InvoicesPageInner() {
                 {/* Totals */}
                 <div className="space-y-1 text-right">
                   <p className="text-gray-500">Subtotal: ₹{selected.subtotal.toLocaleString("en-IN")}</p>
+                  {selected.gst_type === "vat" && (selected.vat_amount || 0) > 0 && <p className="text-gray-500">VAT ({selected.vat_rate}%): ₹{(selected.vat_amount||0).toLocaleString("en-IN")}</p>}
                   {selected.gst_type === "cgst_sgst" && <><p className="text-gray-500">CGST ({selected.gst_rate/2}%): ₹{(selected.cgst||0).toLocaleString("en-IN")}</p><p className="text-gray-500">SGST ({selected.gst_rate/2}%): ₹{(selected.sgst||0).toLocaleString("en-IN")}</p></>}
                   {selected.gst_type === "igst" && <p className="text-gray-500">IGST ({selected.gst_rate}%): ₹{(selected.igst||0).toLocaleString("en-IN")}</p>}
                   <p className="font-bold text-base" style={{ color: pdfColor && pdfColor !== "none" ? pdfColor : undefined }}>Grand Total: ₹{selected.total.toLocaleString("en-IN")}</p>
+                  {(selected.tds_amount || 0) > 0 && <p className="text-orange-600">TDS ({selected.tds_pct}%): -₹{(selected.tds_amount||0).toLocaleString("en-IN")}</p>}
+                  {(selected.tds_amount || 0) > 0 && <p className="font-semibold text-gray-800 dark:text-gray-200">Net Payable: ₹{(selected.total - (selected.tds_amount||0)).toLocaleString("en-IN")}</p>}
                   {(selected.amount_paid ?? 0) > 0 && <p className="text-green-600">Paid: ₹{(selected.amount_paid ?? 0).toLocaleString("en-IN")}</p>}
                 </div>
                 {selected.notes && <div className="border-t dark:border-gray-700 pt-4"><p className="font-bold text-gray-500 uppercase text-xs mb-1">Notes</p><p>{selected.notes}</p></div>}
@@ -1440,6 +1571,9 @@ function InvoicesPageInner() {
 
               <div className="space-y-1">
                 <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Subtotal</span><span>₹{selected.subtotal.toLocaleString("en-IN")}</span></div>
+                {selected.gst_type === "vat" && (selected.vat_amount || 0) > 0 && (
+                  <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>VAT ({selected.vat_rate}%)</span><span>₹{(selected.vat_amount||0).toLocaleString("en-IN")}</span></div>
+                )}
                 {selected.gst_type === "cgst_sgst" ? <>
                   <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({selected.gst_rate/2}%)</span><span>₹{(selected.cgst||0).toLocaleString("en-IN")}</span></div>
                   <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({selected.gst_rate/2}%)</span><span>₹{(selected.sgst||0).toLocaleString("en-IN")}</span></div>
@@ -1447,6 +1581,10 @@ function InvoicesPageInner() {
                   <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({selected.gst_rate}%)</span><span>₹{(selected.igst||0).toLocaleString("en-IN")}</span></div>
                 ) : null}
                 <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1"><span>Grand Total</span><span>₹{selected.total.toLocaleString("en-IN")}</span></div>
+                {(selected.tds_amount || 0) > 0 && <>
+                  <div className="flex justify-between text-orange-600 dark:text-orange-400"><span>TDS ({selected.tds_pct}%)</span><span>-₹{(selected.tds_amount||0).toLocaleString("en-IN")}</span></div>
+                  <div className="flex justify-between font-semibold text-gray-900 dark:text-white"><span>Net Payable</span><span>₹{(selected.total - (selected.tds_amount||0)).toLocaleString("en-IN")}</span></div>
+                </>}
               </div>
 
               {/* Payment details */}
@@ -1561,9 +1699,14 @@ function InvoicesPageInner() {
             const setEf = (patch: Partial<typeof emptyForm>) => setEditForm(f => ({ ...f, ...patch }));
             const editHasUPI = ef.payment_methods.includes("UPI");
             const editHasBank = ef.payment_methods.includes("Bank Transfer");
-            const editSubtotal = editItems.reduce((s, i) => s + i.quantity * i.rate, 0);
-            const editGstAmt = (editSubtotal * parseFloat(ef.gst_rate || "0")) / 100;
-            const editTotal = editSubtotal + editGstAmt;
+            const editGross = editItems.reduce((s, i) => s + i.quantity * i.rate, 0);
+            const editDisc = editItems.reduce((s, i) => s + i.quantity * i.rate * ((i.discount_pct || 0) / 100), 0);
+            const editSubtotal = editGross - editDisc;
+            const editGstAmt = ef.tax_mode === "gst" ? (editSubtotal * parseFloat(ef.gst_rate || "0")) / 100 : 0;
+            const editVatAmt = ef.tax_mode === "vat" ? (editSubtotal * parseFloat(ef.vat_rate || "0")) / 100 : 0;
+            const editTdsAmt = (editSubtotal * parseFloat(ef.tds_pct || "0")) / 100;
+            const editTotal = editSubtotal + editGstAmt + editVatAmt;
+            const editNetPayable = editTotal - editTdsAmt;
             const editHalfGst = editGstAmt / 2;
             return (
               <form onSubmit={handleUpdate} className="space-y-5">
@@ -1602,7 +1745,7 @@ function InvoicesPageInner() {
                     return (
                       <div key={i}>
                         <div className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-5">
+                          <div className="col-span-4">
                             <ProductPicker
                               value={item.description}
                               products={products}
@@ -1611,8 +1754,9 @@ function InvoicesPageInner() {
                             />
                           </div>
                           <div className="col-span-2"><Input type="number" min={1} value={item.quantity} onChange={e => { const u=[...editItems]; u[i]={...u[i],quantity:parseInt(e.target.value)||1}; setEditItems(u); }} /></div>
-                          <div className="col-span-3"><Input type="number" min={0} value={item.rate} onChange={e => { const u=[...editItems]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditItems(u); }} /></div>
-                          <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity*item.rate).toLocaleString("en-IN")}</div>
+                          <div className="col-span-2"><Input type="number" min={0} value={item.rate} onChange={e => { const u=[...editItems]; u[i]={...u[i],rate:parseFloat(e.target.value)||0}; setEditItems(u); }} /></div>
+                          <div className="col-span-2"><Input type="number" min={0} max={100} placeholder="Disc%" value={item.discount_pct || ""} onChange={e => { const u=[...editItems]; u[i]={...u[i],discount_pct:parseFloat(e.target.value)||0}; setEditItems(u); }} /></div>
+                          <div className="col-span-1 text-right text-xs text-gray-500 dark:text-gray-400">₹{(item.quantity*item.rate*(1-(item.discount_pct||0)/100)).toLocaleString("en-IN")}</div>
                           <div className="col-span-1 flex justify-end"><button type="button" onClick={() => setEditItems(editItems.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></div>
                         </div>
                         {stockWarning && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{stockWarning}</p>}
@@ -1632,26 +1776,73 @@ function InvoicesPageInner() {
                 </div>
 
                 <div className={sectionStyle}>
-                  <p className={sectionTitle}>Tax Details</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label>GST Type</Label>
-                      <select value={ef.gst_type} onChange={e => setEf({ gst_type: e.target.value })} className={selectStyle}>
-                        <option value="cgst_sgst">CGST + SGST</option>
-                        <option value="igst">IGST</option>
-                        <option value="none">No GST</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5"><Label>GST Rate (%)</Label>
-                      <select value={ef.gst_rate} onChange={e => setEf({ gst_rate: e.target.value })} className={selectStyle}>
-                        <option value="0">0%</option><option value="5">5%</option><option value="12">12%</option><option value="18">18%</option><option value="28">28%</option>
-                      </select>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className={sectionTitle}>Tax Details</p>
+                    <div className="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+                      {(["gst", "vat"] as const).map(m => (
+                        <button key={m} type="button" onClick={() => setEf({ tax_mode: m })}
+                          className={`px-3 py-1 font-medium uppercase transition-colors ${ef.tax_mode === m ? "bg-violet-600 text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                          {m}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1.5">
+                  {ef.tax_mode === "gst" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5"><Label>GST Type</Label>
+                        <select value={ef.gst_type} onChange={e => setEf({ gst_type: e.target.value })} className={selectStyle}>
+                          <option value="cgst_sgst">CGST + SGST</option>
+                          <option value="igst">IGST</option>
+                          <option value="none">No GST</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5"><Label>GST Rate (%)</Label>
+                        <select value={ef.gst_rate} onChange={e => setEf({ gst_rate: e.target.value })} className={selectStyle}>
+                          <option value="0">0%</option><option value="5">5%</option><option value="12">12%</option><option value="18">18%</option><option value="28">28%</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label>VAT Rate (%)</Label>
+                      <input type="number" min={0} max={100} step={0.5} value={ef.vat_rate}
+                        onChange={e => setEf({ vat_rate: e.target.value })}
+                        className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none" />
+                    </div>
+                  )}
+                  <div className="space-y-1.5 mt-3">
+                    <Label>TDS Deduction (%)</Label>
+                    <input type="number" min={0} max={100} step={0.1} value={ef.tds_pct}
+                      onChange={e => setEf({ tds_pct: e.target.value })}
+                      className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none" />
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-sm space-y-1.5 mt-2">
+                    {editDisc > 0 && <>
+                      <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Gross</span><span>₹{editGross.toLocaleString("en-IN")}</span></div>
+                      <div className="flex justify-between text-red-500"><span>Discount</span><span>-₹{editDisc.toLocaleString("en-IN")}</span></div>
+                    </>}
                     <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>Subtotal</span><span>₹{editSubtotal.toLocaleString("en-IN")}</span></div>
-                    {ef.gst_type === "cgst_sgst" && <><div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({parseFloat(ef.gst_rate)/2}%)</span><span>₹{editHalfGst.toLocaleString("en-IN")}</span></div><div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({parseFloat(ef.gst_rate)/2}%)</span><span>₹{editHalfGst.toLocaleString("en-IN")}</span></div></>}
-                    {ef.gst_type === "igst" && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({ef.gst_rate}%)</span><span>₹{editGstAmt.toLocaleString("en-IN")}</span></div>}
+                    {ef.tax_mode === "gst" && ef.gst_type === "cgst_sgst" && <><div className="flex justify-between text-gray-500 dark:text-gray-400"><span>CGST ({parseFloat(ef.gst_rate)/2}%)</span><span>₹{editHalfGst.toLocaleString("en-IN")}</span></div><div className="flex justify-between text-gray-500 dark:text-gray-400"><span>SGST ({parseFloat(ef.gst_rate)/2}%)</span><span>₹{editHalfGst.toLocaleString("en-IN")}</span></div></>}
+                    {ef.tax_mode === "gst" && ef.gst_type === "igst" && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>IGST ({ef.gst_rate}%)</span><span>₹{editGstAmt.toLocaleString("en-IN")}</span></div>}
+                    {ef.tax_mode === "vat" && editVatAmt > 0 && <div className="flex justify-between text-gray-500 dark:text-gray-400"><span>VAT ({ef.vat_rate}%)</span><span>₹{editVatAmt.toLocaleString("en-IN")}</span></div>}
                     <div className="flex justify-between font-bold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1.5"><span>Grand Total</span><span>₹{editTotal.toLocaleString("en-IN")}</span></div>
+                    {editTdsAmt > 0 && <>
+                      <div className="flex justify-between text-orange-600 dark:text-orange-400"><span>TDS ({ef.tds_pct}%)</span><span>-₹{editTdsAmt.toLocaleString("en-IN")}</span></div>
+                      <div className="flex justify-between font-semibold text-gray-900 dark:text-white border-t dark:border-gray-700 pt-1.5"><span>Net Payable</span><span>₹{editNetPayable.toLocaleString("en-IN")}</span></div>
+                    </>}
+                  </div>
+                </div>
+
+                <div className={sectionStyle}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={sectionTitle}>Proforma Invoice</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Excluded from revenue reports</p>
+                    </div>
+                    <button type="button" onClick={() => setEf({ is_proforma: !ef.is_proforma })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${ef.is_proforma ? "bg-violet-600" : "bg-gray-300 dark:bg-gray-600"}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${ef.is_proforma ? "translate-x-5" : ""}`} />
+                    </button>
                   </div>
                 </div>
 

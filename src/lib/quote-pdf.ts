@@ -1,6 +1,6 @@
 type RGB = [number, number, number];
 
-export type QuotePdfItem = { description: string; quantity: number; rate: number };
+export type QuotePdfItem = { description: string; quantity: number; rate: number; discount_pct?: number };
 
 export type QuotePdfData = {
   quote_number: string;
@@ -11,6 +11,8 @@ export type QuotePdfData = {
   igst: number | null;
   gst_type?: string | null;
   gst_rate?: number | null;
+  vat_rate?: number | null;
+  vat_amount?: number | null;
   total: number;
   status: string;
   valid_until?: string | null;
@@ -60,27 +62,42 @@ export async function buildQuotePdf(q: QuotePdfData) {
   const customer = [q.customer_name, q.customer_company, q.customer_address, q.customer_gstin ? `GSTIN: ${q.customer_gstin}` : null].filter(Boolean) as string[];
   customer.forEach((line, i) => doc.text(line, 110, bodyStart + 7 + i * 5));
 
+  const hasDiscounts = q.items.some(item => (item.discount_pct || 0) > 0);
+  const grossSubtotal = q.items.reduce((s, i) => s + i.quantity * i.rate, 0);
+  const discountTotal = grossSubtotal - q.subtotal;
+
   const tableStartY = bodyStart + Math.max(seller.length, customer.length) * 5 + 14;
   autoTable(doc, {
     startY: tableStartY,
-    head: [["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
-    body: q.items.map((item, i) => [
-      i + 1,
-      item.description,
-      item.quantity,
-      item.rate.toLocaleString("en-IN"),
-      (item.quantity * item.rate).toLocaleString("en-IN"),
-    ]),
+    head: [hasDiscounts
+      ? ["#", "Description", "Qty", "Rate (₹)", "Disc%", "Amount (₹)"]
+      : ["#", "Description", "Qty", "Rate (₹)", "Amount (₹)"]],
+    body: q.items.map((item, i) => {
+      const gross = item.quantity * item.rate;
+      const net = gross * (1 - (item.discount_pct || 0) / 100);
+      return hasDiscounts
+        ? [i + 1, item.description, item.quantity, item.rate.toLocaleString("en-IN"), item.discount_pct ? `${item.discount_pct}%` : "—", net.toLocaleString("en-IN")]
+        : [i + 1, item.description, item.quantity, item.rate.toLocaleString("en-IN"), gross.toLocaleString("en-IN")];
+    }),
     headStyles: { fillColor: ACCENT, textColor: WHITE, fontSize: 9 },
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 16 }, 3: { cellWidth: 32 }, 4: { cellWidth: 32 } },
+    columnStyles: hasDiscounts
+      ? { 0: { cellWidth: 8 }, 2: { cellWidth: 14 }, 3: { cellWidth: 28 }, 4: { cellWidth: 16 }, 5: { cellWidth: 28 } }
+      : { 0: { cellWidth: 8 }, 2: { cellWidth: 16 }, 3: { cellWidth: 32 }, 4: { cellWidth: 32 } },
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalY = (doc as any).lastAutoTable.finalY + 8;
   const summaryX = 120;
-  const rows: [string, string][] = [["Subtotal", `₹${q.subtotal.toLocaleString("en-IN")}`]];
-  if (q.gst_type === "igst" && q.igst) {
+  const rows: [string, string][] = [];
+  if (hasDiscounts) {
+    rows.push(["Gross Subtotal", `₹${grossSubtotal.toLocaleString("en-IN")}`]);
+    rows.push(["Discount", `-₹${discountTotal.toLocaleString("en-IN")}`]);
+  }
+  rows.push(["Subtotal", `₹${q.subtotal.toLocaleString("en-IN")}`]);
+  if (q.gst_type === "vat" && (q.vat_amount || 0) > 0) {
+    rows.push([`VAT (${q.vat_rate || 0}%)`, `₹${(q.vat_amount || 0).toLocaleString("en-IN")}`]);
+  } else if (q.gst_type === "igst" && q.igst) {
     rows.push([`IGST${q.gst_rate ? ` (${q.gst_rate}%)` : ""}`, `₹${q.igst.toLocaleString("en-IN")}`]);
   } else if (q.cgst || q.sgst) {
     rows.push([`CGST${q.gst_rate ? ` (${q.gst_rate / 2}%)` : ""}`, `₹${(q.cgst || 0).toLocaleString("en-IN")}`]);

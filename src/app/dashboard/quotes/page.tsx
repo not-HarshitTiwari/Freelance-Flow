@@ -14,7 +14,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 import { downloadQuotePdf } from "@/lib/quote-pdf";
 
-type QuoteItem = { description: string; quantity: number; rate: number; product_id?: string };
+type QuoteItem = { description: string; quantity: number; rate: number; product_id?: string; discount_pct?: number };
 
 type Product = {
   id: string;
@@ -54,6 +54,8 @@ type Quote = {
   customer_gstin: string | null;
   client_id: string | null;
   converted_invoice_id: string | null;
+  vat_rate: number | null;
+  vat_amount: number | null;
   created_at: string;
 };
 
@@ -156,7 +158,7 @@ function ItemRows({ rows, products, onChange, onSelectProduct, onAdd, onRemove }
                 placeholder="Qty"
                 value={item.quantity}
                 onChange={e => onChange(i, "quantity", Number(e.target.value))}
-                className="w-20"
+                className="w-16"
               />
               <Input
                 type="number"
@@ -164,6 +166,15 @@ function ItemRows({ rows, products, onChange, onSelectProduct, onAdd, onRemove }
                 value={item.rate}
                 onChange={e => onChange(i, "rate", Number(e.target.value))}
                 className="w-24"
+              />
+              <Input
+                type="number"
+                placeholder="Disc%"
+                min={0}
+                max={100}
+                value={item.discount_pct || ""}
+                onChange={e => onChange(i, "discount_pct", Number(e.target.value))}
+                className="w-16"
               />
               {rows.length > 1 && (
                 <button type="button" onClick={() => onRemove(i)} className="text-gray-400 hover:text-red-500 mt-2">
@@ -198,6 +209,8 @@ export default function QuotesPage() {
   const [items, setItems] = useState<QuoteItem[]>([{ ...emptyItem }]);
   const [gstType, setGstType] = useState("cgst_sgst");
   const [gstRate, setGstRate] = useState(18);
+  const [taxMode, setTaxMode] = useState<"gst" | "vat">("gst");
+  const [vatRate, setVatRate] = useState(0);
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
@@ -242,6 +255,8 @@ export default function QuotesPage() {
     setItems([{ ...emptyItem }]);
     setGstType("cgst_sgst");
     setGstRate(18);
+    setTaxMode("gst");
+    setVatRate(0);
     setValidUntil("");
     setNotes("");
     setTerms("");
@@ -281,9 +296,12 @@ export default function QuotesPage() {
   function addItem() { setItems(its => [...its, { ...emptyItem }]); }
   function removeItem(i: number) { setItems(its => its.filter((_, idx) => idx !== i)); }
 
-  const subtotal = items.reduce((s, it) => s + (it.quantity || 0) * (it.rate || 0), 0);
-  const gstAmount = (subtotal * gstRate) / 100;
-  const total = subtotal + gstAmount;
+  const qGrossSubtotal = items.reduce((s, it) => s + (it.quantity || 0) * (it.rate || 0), 0);
+  const qDiscountTotal = items.reduce((s, it) => s + (it.quantity || 0) * (it.rate || 0) * ((it.discount_pct || 0) / 100), 0);
+  const subtotal = qGrossSubtotal - qDiscountTotal;
+  const gstAmount = taxMode === "gst" ? (subtotal * gstRate) / 100 : 0;
+  const vatAmount = taxMode === "vat" ? (subtotal * vatRate) / 100 : 0;
+  const total = subtotal + gstAmount + vatAmount;
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -294,7 +312,10 @@ export default function QuotesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: selectedClientId || null,
-          items, gst_type: gstType, gst_rate: gstRate,
+          items,
+          gst_type: taxMode === "vat" ? "vat" : gstType,
+          gst_rate: taxMode === "vat" ? vatRate : gstRate,
+          vat_rate: taxMode === "vat" ? vatRate : 0,
           valid_until: validUntil || null, notes, terms,
           ...sellerInfo,
           customer_name: customerName, customer_company: customerCompany,
@@ -318,8 +339,11 @@ export default function QuotesPage() {
     setEditing(q);
     setEditQuoteNumber(q.quote_number);
     setItems(q.items?.length ? q.items : [{ ...emptyItem }]);
-    setGstType(q.gst_type);
-    setGstRate(q.gst_rate);
+    const isVat = q.gst_type === "vat" || (q.vat_rate && q.vat_rate > 0);
+    setGstType(isVat ? "cgst_sgst" : q.gst_type);
+    setGstRate(isVat ? 18 : q.gst_rate);
+    setTaxMode(isVat ? "vat" : "gst");
+    setVatRate(q.vat_rate || 0);
     setValidUntil(q.valid_until || "");
     setNotes(q.notes || "");
     setTerms(q.terms || "");
@@ -340,7 +364,10 @@ export default function QuotesPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: editing.id, quote_number: editQuoteNumber.trim(), items, gst_type: gstType, gst_rate: gstRate,
+          id: editing.id, quote_number: editQuoteNumber.trim(), items,
+          gst_type: taxMode === "vat" ? "vat" : gstType,
+          gst_rate: taxMode === "vat" ? vatRate : gstRate,
+          vat_rate: taxMode === "vat" ? vatRate : 0,
           valid_until: validUntil || null, notes, terms,
           customer_name: customerName, customer_company: customerCompany,
           customer_email: customerEmail, customer_phone: customerPhone, customer_address: customerAddress, customer_gstin: customerGstin,
@@ -450,16 +477,30 @@ export default function QuotesPage() {
 
               <ItemRows rows={items} products={products} onChange={updateItem} onSelectProduct={pickProduct} onAdd={addItem} onRemove={removeItem} />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>GST Type</Label>
-                  <select value={gstType} onChange={e => setGstType(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
-                    <option value="cgst_sgst">CGST + SGST</option>
-                    <option value="igst">IGST</option>
-                    <option value="none">No GST</option>
-                  </select>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Tax</Label>
+                  <div className="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+                    {(["gst", "vat"] as const).map(m => (
+                      <button key={m} type="button" onClick={() => setTaxMode(m)}
+                        className={`px-3 py-1 font-medium uppercase transition-colors ${taxMode === m ? "bg-violet-600 text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2"><Label>GST Rate (%)</Label><Input type="number" value={gstRate} onChange={e => setGstRate(Number(e.target.value))} /></div>
+                {taxMode === "gst" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={gstType} onChange={e => setGstType(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
+                      <option value="cgst_sgst">CGST + SGST</option>
+                      <option value="igst">IGST</option>
+                      <option value="none">No GST</option>
+                    </select>
+                    <Input type="number" placeholder="Rate %" value={gstRate} onChange={e => setGstRate(Number(e.target.value))} />
+                  </div>
+                ) : (
+                  <Input type="number" placeholder="VAT Rate %" min={0} max={100} value={vatRate} onChange={e => setVatRate(Number(e.target.value))} />
+                )}
               </div>
 
               <div className="space-y-2"><Label>Valid Until</Label><Input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} /></div>
@@ -467,7 +508,8 @@ export default function QuotesPage() {
               <div className="space-y-2"><Label>Terms</Label><Textarea rows={2} value={terms} onChange={e => setTerms(e.target.value)} /></div>
 
               <div className="flex justify-between text-sm border-t pt-3 dark:border-gray-700">
-                <span className="text-gray-500">Subtotal: ₹{subtotal.toLocaleString("en-IN")} · GST: ₹{gstAmount.toLocaleString("en-IN")}</span>
+                {qDiscountTotal > 0 && <span className="text-red-500">Discount: -₹{qDiscountTotal.toLocaleString("en-IN")} ·&nbsp;</span>}
+                <span className="text-gray-500">Subtotal: ₹{subtotal.toLocaleString("en-IN")} · Tax: ₹{(gstAmount + vatAmount).toLocaleString("en-IN")}</span>
                 <span className="font-semibold text-gray-900 dark:text-white">Total: ₹{total.toLocaleString("en-IN")}</span>
               </div>
 
@@ -568,16 +610,30 @@ export default function QuotesPage() {
 
             <ItemRows rows={items} products={products} onChange={updateItem} onSelectProduct={pickProduct} onAdd={addItem} onRemove={removeItem} />
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>GST Type</Label>
-                <select value={gstType} onChange={e => setGstType(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
-                  <option value="cgst_sgst">CGST + SGST</option>
-                  <option value="igst">IGST</option>
-                  <option value="none">No GST</option>
-                </select>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Tax</Label>
+                <div className="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+                  {(["gst", "vat"] as const).map(m => (
+                    <button key={m} type="button" onClick={() => setTaxMode(m)}
+                      className={`px-3 py-1 font-medium uppercase transition-colors ${taxMode === m ? "bg-violet-600 text-white" : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2"><Label>GST Rate (%)</Label><Input type="number" value={gstRate} onChange={e => setGstRate(Number(e.target.value))} /></div>
+              {taxMode === "gst" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={gstType} onChange={e => setGstType(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2.5 text-sm outline-none">
+                    <option value="cgst_sgst">CGST + SGST</option>
+                    <option value="igst">IGST</option>
+                    <option value="none">No GST</option>
+                  </select>
+                  <Input type="number" placeholder="Rate %" value={gstRate} onChange={e => setGstRate(Number(e.target.value))} />
+                </div>
+              ) : (
+                <Input type="number" placeholder="VAT Rate %" min={0} max={100} value={vatRate} onChange={e => setVatRate(Number(e.target.value))} />
+              )}
             </div>
 
             <div className="space-y-2"><Label>Valid Until</Label><Input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} /></div>
@@ -585,7 +641,8 @@ export default function QuotesPage() {
             <div className="space-y-2"><Label>Terms</Label><Textarea rows={2} value={terms} onChange={e => setTerms(e.target.value)} /></div>
 
             <div className="flex justify-between text-sm border-t pt-3 dark:border-gray-700">
-              <span className="text-gray-500">Subtotal: ₹{subtotal.toLocaleString("en-IN")} · GST: ₹{gstAmount.toLocaleString("en-IN")}</span>
+              {qDiscountTotal > 0 && <span className="text-red-500">Discount: -₹{qDiscountTotal.toLocaleString("en-IN")} ·&nbsp;</span>}
+              <span className="text-gray-500">Subtotal: ₹{subtotal.toLocaleString("en-IN")} · Tax: ₹{(gstAmount + vatAmount).toLocaleString("en-IN")}</span>
               <span className="font-semibold text-gray-900 dark:text-white">Total: ₹{total.toLocaleString("en-IN")}</span>
             </div>
 

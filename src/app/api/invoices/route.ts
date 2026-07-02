@@ -4,6 +4,7 @@ import { generateInvoiceNumber } from "@/lib/invoice-number";
 import { applyStockChange, type StockItem } from "@/lib/stock";
 import { calculateGst } from "@/lib/gst";
 import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
+import { logAudit } from "@/lib/audit";
 
 const STOCK_WARNING = "Invoice saved, but some stock counts couldn't be updated automatically.";
 
@@ -24,9 +25,12 @@ export async function POST(request: Request) {
     seller_name, seller_address, seller_email, seller_phone, seller_gstin,
     customer_name, customer_company, customer_address, customer_gstin, customer_email, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
+    invoice_type, tds_pct, vat_rate,
   } = body;
 
-  const { subtotal, totalGst, cgst, sgst, igst, total } = calculateGst(items, gst_type, gst_rate);
+  const { subtotal, totalGst, cgst, sgst, igst, vatAmount, total } = calculateGst(items, gst_type, gst_rate);
+  const tdsPct = parseFloat(tds_pct) || 0;
+  const tdsAmount = (subtotal * tdsPct) / 100;
 
   const { data: profile } = await supabase.from("profiles").select("plan").eq("id", ownerId).single();
   const plan = profile?.plan || "free";
@@ -73,11 +77,19 @@ export async function POST(request: Request) {
     is_recurring: wantsRecurring,
     recurrence_interval: wantsRecurring ? recurrence_interval : null,
     next_invoice_date: wantsRecurring ? next_invoice_date : null,
+    invoice_type: invoice_type === "proforma" ? "proforma" : "invoice",
+    tds_pct: tdsPct,
+    tds_amount: tdsAmount,
+    vat_rate: parseFloat(vat_rate) || 0,
+    vat_amount: vatAmount,
   }).select("*").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const stockErrors = await applyStockChange(supabase, items as StockItem[], 1);
+
+  await logAudit(supabase, ownerId, "invoice.create", "invoice", data?.id ?? null,
+    { invoice_number: data?.invoice_number, total, customer_name }, user.email);
 
   return NextResponse.json({ invoice: data, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }
@@ -118,6 +130,7 @@ export async function PATCH(request: Request) {
     customer_name, customer_email, customer_company, customer_address, customer_gstin, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
     payment_link, payment_link_id, reminder_sent_at,
+    invoice_type, tds_pct, tds_amount, vat_rate, vat_amount,
   } = body;
 
   if (is_recurring) {
@@ -143,6 +156,7 @@ export async function PATCH(request: Request) {
     customer_name, customer_email, customer_company, customer_address, customer_gstin, customer_phone,
     is_recurring, recurrence_interval, next_invoice_date,
     payment_link, payment_link_id, reminder_sent_at,
+    invoice_type, tds_pct, tds_amount, vat_rate, vat_amount,
   };
   for (const [k, v] of Object.entries(allowed)) {
     if (v !== undefined) updates[k] = v;
@@ -166,6 +180,8 @@ export async function PATCH(request: Request) {
     ];
   }
 
+  await logAudit(supabase, ownerId, "invoice.update", "invoice", id, { updates: Object.keys(updates) }, user.email);
+
   return NextResponse.json({ invoice: data, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }
 
@@ -185,6 +201,8 @@ export async function DELETE(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const stockErrors = await applyStockChange(supabase, existing?.items as StockItem[] | undefined, -1);
+
+  await logAudit(supabase, ownerId, "invoice.delete", "invoice", id, {}, user.email);
 
   return NextResponse.json({ success: true, ...(stockErrors.length ? { stock_warning: STOCK_WARNING } : {}) });
 }

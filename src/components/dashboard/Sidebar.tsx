@@ -26,6 +26,10 @@ import {
   CreditCard,
   BookOpen,
   Undo2,
+  TrendingUp,
+  AlertTriangle,
+  Key,
+  ShieldCheck,
 } from "lucide-react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
@@ -35,6 +39,7 @@ import type { User } from "@supabase/supabase-js";
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/pl-report", label: "P&L Report", icon: TrendingUp },
   { href: "/dashboard/proposals", label: "Proposals", icon: FileText },
   { href: "/dashboard/quotes", label: "Quotes", icon: FileSpreadsheet },
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
@@ -47,6 +52,9 @@ const navItems = [
   { href: "/dashboard/time-tracking", label: "Time Tracking", icon: Clock },
   { href: "/dashboard/contracts", label: "Contracts", icon: FileSignature },
   { href: "/dashboard/tax-report", label: "Tax Report", icon: Calculator },
+  { href: "/dashboard/aged-receivables", label: "Aged Receivables", icon: AlertTriangle },
+  { href: "/dashboard/api-keys", label: "API Keys", icon: Key },
+  { href: "/dashboard/audit-log", label: "Audit Log", icon: ShieldCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
