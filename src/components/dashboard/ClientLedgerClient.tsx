@@ -106,9 +106,9 @@ export function ClientLedgerClient({ clients, invoices, payments }: { clients: C
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 mb-1">Total Invoiced</p><p className="text-lg font-bold text-gray-900 dark:text-white">₹{totalInvoiced.toLocaleString("en-IN")}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 mb-1">Total Paid</p><p className="text-lg font-bold text-green-600">₹{totalPaid.toLocaleString("en-IN")}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 mb-1">Outstanding Balance</p><p className="text-lg font-bold text-amber-600">₹{balance.toLocaleString("en-IN")}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Invoiced</p><p className="text-lg font-bold text-gray-900 dark:text-white">₹{totalInvoiced.toLocaleString("en-IN")}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Paid</p><p className="text-lg font-bold text-green-600 dark:text-green-400">₹{totalPaid.toLocaleString("en-IN")}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Outstanding Balance</p><p className="text-lg font-bold text-amber-600 dark:text-amber-400">₹{balance.toLocaleString("en-IN")}</p></CardContent></Card>
         </div>
 
         <Card>
@@ -129,10 +129,10 @@ export function ClientLedgerClient({ clients, invoices, payments }: { clients: C
                 )}
                 {withRunning.map((r, i) => (
                   <tr key={i} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                    <td className="p-3 text-gray-500">{new Date(r.date).toLocaleDateString("en-IN")}</td>
+                    <td className="p-3 text-gray-500 dark:text-gray-400">{new Date(r.date).toLocaleDateString("en-IN")}</td>
                     <td className="p-3 text-gray-900 dark:text-gray-100">{r.label}</td>
                     <td className="p-3 text-right text-gray-700 dark:text-gray-300">{r.debit ? `₹${r.debit.toLocaleString("en-IN")}` : ""}</td>
-                    <td className="p-3 text-right text-green-600">{r.credit ? `₹${r.credit.toLocaleString("en-IN")}` : ""}</td>
+                    <td className="p-3 text-right text-green-600 dark:text-green-400">{r.credit ? `₹${r.credit.toLocaleString("en-IN")}` : ""}</td>
                     <td className="p-3 text-right font-medium text-gray-900 dark:text-white">₹{r.running.toLocaleString("en-IN")}</td>
                   </tr>
                 ))}
@@ -172,7 +172,7 @@ export function ClientLedgerClient({ clients, invoices, payments }: { clients: C
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className={`font-semibold flex items-center gap-1 justify-end ${balance > 0 ? "text-amber-600" : "text-green-600"}`}>
+                  <p className={`font-semibold flex items-center gap-1 justify-end ${balance > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}`}>
                     <IndianRupee size={14} />{balance.toLocaleString("en-IN")}
                   </p>
                   <p className="text-xs text-gray-400">{balance > 0 ? "due" : "settled"}</p>

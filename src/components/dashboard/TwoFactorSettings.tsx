@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ export function TwoFactorSettings() {
   const [verifiedFactorId, setVerifiedFactorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [enroll, setEnroll] = useState<EnrollState>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -69,14 +71,19 @@ export function TwoFactorSettings() {
 
   async function disable2FA() {
     if (!verifiedFactorId) return;
-    if (!confirm("Disable two-factor authentication? You'll only need your password to sign in.")) return;
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedFactorId });
-    if (error) toast.error(error.message);
-    else toast.success("Two-factor authentication disabled");
-    setBusy(false);
-    refresh();
+    setPendingConfirm({
+      title: "Disable 2FA",
+      desc: "Disable two-factor authentication? You'll only need your password to sign in.",
+      action: async () => {
+        setBusy(true);
+        const supabase = createClient();
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedFactorId! });
+        if (error) toast.error(error.message);
+        else toast.success("Two-factor authentication disabled");
+        setBusy(false);
+        refresh();
+      },
+    });
   }
 
   return (
@@ -127,6 +134,9 @@ export function TwoFactorSettings() {
           </Button>
         )}
       </CardContent>
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
+      )}
     </Card>
   );
 }

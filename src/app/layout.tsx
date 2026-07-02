@@ -18,6 +18,17 @@ export const metadata: Metadata = {
   title: "FreelanceFlow — Proposals, Invoices & Payments for Freelancers",
   description: "AI-powered tool for Indian freelancers to generate proposals, create invoices, and automate payment reminders.",
   icons: { icon: "/logo.png", apple: "/logo.png" },
+  openGraph: {
+    title: "FreelanceFlow — Proposals, Invoices & Payments for Freelancers",
+    description: "AI-powered tool for Indian freelancers to generate proposals, create invoices, and automate payment reminders.",
+    type: "website",
+    siteName: "FreelanceFlow",
+  },
+  twitter: {
+    card: "summary",
+    title: "FreelanceFlow — Proposals, Invoices & Payments for Freelancers",
+    description: "AI-powered tool for Indian freelancers to generate proposals, create invoices, and automate payment reminders.",
+  },
 };
 
 export default function RootLayout({

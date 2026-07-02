@@ -1611,7 +1611,7 @@ function InvoicesPageInner() {
                   <p className="font-bold text-base" style={{ color: pdfColor && pdfColor !== "none" ? pdfColor : undefined }}>Grand Total: ₹{selected.total.toLocaleString("en-IN")}</p>
                   {(selected.tds_amount || 0) > 0 && <p className="text-orange-600">TDS ({selected.tds_pct}%): -₹{(selected.tds_amount||0).toLocaleString("en-IN")}</p>}
                   {(selected.tds_amount || 0) > 0 && <p className="font-semibold text-gray-800 dark:text-gray-200">Net Payable: ₹{(selected.total - (selected.tds_amount||0)).toLocaleString("en-IN")}</p>}
-                  {(selected.amount_paid ?? 0) > 0 && <p className="text-green-600">Paid: ₹{(selected.amount_paid ?? 0).toLocaleString("en-IN")}</p>}
+                  {(selected.amount_paid ?? 0) > 0 && <p className="text-green-600 dark:text-green-400">Paid: ₹{(selected.amount_paid ?? 0).toLocaleString("en-IN")}</p>}
                 </div>
                 {selected.notes && <div className="border-t dark:border-gray-700 pt-4"><p className="font-bold text-gray-500 uppercase text-xs mb-1">Notes</p><p>{selected.notes}</p></div>}
                 {selected.terms && <div><p className="font-bold text-gray-500 uppercase text-xs mb-1">Terms</p><p>{selected.terms}</p></div>}

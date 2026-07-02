@@ -91,6 +91,7 @@ function GroupedBarChart({
   const groupW = chartW / (data.length || 1);
   const barW = Math.min(groupW * 0.35, 20);
   const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const fs = Math.max(7, Math.min(12, H * 0.032));
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
@@ -99,8 +100,8 @@ function GroupedBarChart({
         const y = PAD_T + chartH - t * chartH;
         return (
           <g key={t}>
-            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="#e5e7eb" strokeWidth="0.5" className="dark:stroke-gray-700" />
-            <text x={PAD_L - 3} y={y + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">
+            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="currentColor" strokeOpacity={0.12} strokeWidth="0.5" />
+            <text x={PAD_L - 3} y={y + 3} textAnchor="end" fontSize={fs} fill="currentColor" fillOpacity={0.45}>
               {v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toFixed(0)}
             </text>
           </g>
@@ -114,14 +115,14 @@ function GroupedBarChart({
           <g key={d.month}>
             <rect x={cx - barW - 1} y={PAD_T + chartH - revH} width={barW} height={revH} fill="#7c3aed" rx={2} />
             <rect x={cx + 1} y={PAD_T + chartH - expH} width={barW} height={expH} fill="#f87171" rx={2} />
-            <text x={cx} y={H - 6} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{d.month}</text>
+            <text x={cx} y={H - 6} textAnchor="middle" fontSize={fs} fill="currentColor" fillOpacity={0.45}>{d.month}</text>
           </g>
         );
       })}
-      <rect x={PAD_L} y={5} width={8} height={8} fill="#7c3aed" rx={1.5} />
-      <text x={PAD_L + 11} y={12} fontSize={8} fill="#6b7280">Revenue</text>
-      <rect x={PAD_L + 60} y={5} width={8} height={8} fill="#f87171" rx={1.5} />
-      <text x={PAD_L + 71} y={12} fontSize={8} fill="#6b7280">Expenses</text>
+      <rect x={PAD_L} y={5} width={fs * 1.1} height={fs * 1.1} fill="#7c3aed" rx={1.5} />
+      <text x={PAD_L + fs * 1.4} y={fs + 3} fontSize={fs} fill="currentColor" fillOpacity={0.6}>Revenue</text>
+      <rect x={PAD_L + fs * 9.5} y={5} width={fs * 1.1} height={fs * 1.1} fill="#f87171" rx={1.5} />
+      <text x={PAD_L + fs * 10.9} y={fs + 3} fontSize={fs} fill="currentColor" fillOpacity={0.6}>Expenses</text>
     </svg>
   );
 }
@@ -141,11 +142,12 @@ function CashFlowChart({
   const chartH = H - PAD_B - PAD_T;
   const zeroY = PAD_T + chartH / 2;
   const barW = Math.min((chartW / (data.length || 1)) * 0.55, 28);
+  const fs = Math.max(7, Math.min(12, H * 0.032));
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
-      <line x1={PAD_L} y1={zeroY} x2={W - PAD_R} y2={zeroY} stroke="#6b7280" strokeWidth="0.8" strokeDasharray="4,3" />
-      <text x={PAD_L - 3} y={zeroY + 3} textAnchor="end" fontSize={7.5} fill="#9ca3af">0</text>
+      <line x1={PAD_L} y1={zeroY} x2={W - PAD_R} y2={zeroY} stroke="currentColor" strokeOpacity={0.3} strokeWidth="0.8" strokeDasharray="4,3" />
+      <text x={PAD_L - 3} y={zeroY + 3} textAnchor="end" fontSize={fs} fill="currentColor" fillOpacity={0.45}>0</text>
       {data.map((d, i) => {
         const cx = PAD_L + (i + 0.5) * (chartW / (data.length || 1));
         const half = chartH / 2;
@@ -154,9 +156,9 @@ function CashFlowChart({
         return (
           <g key={d.month}>
             <rect x={cx - barW / 2} y={y} width={barW} height={h} fill={d.net >= 0 ? "#16a34a" : "#dc2626"} rx={2} />
-            <text x={cx} y={H - 6} textAnchor="middle" fontSize={7.5} fill="#9ca3af">{d.month}</text>
+            <text x={cx} y={H - 6} textAnchor="middle" fontSize={fs} fill="currentColor" fillOpacity={0.45}>{d.month}</text>
             {Math.abs(d.net) >= 100 && (
-              <text x={cx} y={d.net >= 0 ? y - 2 : y + h + 8} textAnchor="middle" fontSize={7} fill={d.net >= 0 ? "#16a34a" : "#dc2626"}>
+              <text x={cx} y={d.net >= 0 ? y - 2 : y + h + 8} textAnchor="middle" fontSize={Math.max(6.5, fs * 0.9)} fill={d.net >= 0 ? "#16a34a" : "#dc2626"}>
                 {d.net >= 0 ? "+" : ""}{(d.net / 1000).toFixed(0)}k
               </text>
             )}

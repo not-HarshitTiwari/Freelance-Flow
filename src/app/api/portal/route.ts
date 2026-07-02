@@ -72,12 +72,21 @@ export async function GET(req: Request) {
     supabase.from("profiles").select("plan").eq("id", portal.user_id).single(),
   ]);
 
-  const { data: invoices } = await supabase
+  const orParts = [
+    clientData?.email ? `customer_email.ilike.${clientData.email}` : null,
+    clientData?.name ? `customer_name.ilike.${clientData.name}` : null,
+  ].filter(Boolean) as string[];
+
+  let invoicesQuery = supabase
     .from("invoices")
     .select("id, invoice_number, invoice_date, due_date, total, status, items, subtotal, tax, cgst, sgst, igst, gst_type, gst_rate, payment_method, payment_methods, upi_id, bank_account_name, bank_account_number, bank_ifsc, bank_name, transaction_id, notes, terms, seller_name, seller_address, seller_email, seller_phone, seller_gstin, customer_name, customer_company, customer_address, customer_gstin, payment_link, amount_paid")
     .eq("user_id", portal.user_id)
-    .or(`customer_email.ilike.${clientData?.email ?? ""},customer_name.ilike.${clientData?.name ?? ""}`)
     .order("created_at", { ascending: false });
+
+  if (orParts.length > 0) invoicesQuery = invoicesQuery.or(orParts.join(","));
+  else invoicesQuery = invoicesQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+
+  const { data: invoices } = await invoicesQuery;
 
   let proposalsQuery = supabase
     .from("proposals")

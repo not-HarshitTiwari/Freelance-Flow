@@ -108,7 +108,7 @@ export function PayNowButton({ invoiceId, invoiceNumber, portalToken, clientName
       >
         {loading ? "Opening payment..." : "Pay Now"}
       </button>
-      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{error}</p>}
     </div>
   );
 }

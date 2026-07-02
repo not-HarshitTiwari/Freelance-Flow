@@ -115,7 +115,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                         );
                       })()}
                       {(inv.amount_paid ?? 0) > 0 && (
-                        <p className="text-xs text-green-600 font-medium">
+                        <p className="text-xs text-green-600 dark:text-green-400 font-medium">
                           ₹{(inv.amount_paid ?? 0).toLocaleString("en-IN")} paid · Balance: ₹{(inv.total - (inv.amount_paid ?? 0)).toLocaleString("en-IN")} due
                         </p>
                       )}

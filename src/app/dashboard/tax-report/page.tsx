@@ -246,9 +246,9 @@ export default function TaxReportPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Taxable Value", value: totals.subtotal, color: "text-gray-900 dark:text-white" },
-          { label: "CGST Collected", value: totals.cgst, color: "text-blue-600" },
-          { label: "SGST Collected", value: totals.sgst, color: "text-violet-600" },
-          { label: "IGST Collected", value: totals.igst, color: "text-orange-600" },
+          { label: "CGST Collected", value: totals.cgst, color: "text-blue-600 dark:text-blue-400" },
+          { label: "SGST Collected", value: totals.sgst, color: "text-violet-600 dark:text-violet-400" },
+          { label: "IGST Collected", value: totals.igst, color: "text-orange-600 dark:text-orange-400" },
         ].map(c => (
           <Card key={c.label}>
             <CardContent className="p-4">
@@ -328,9 +328,9 @@ export default function TaxReportPage() {
                       <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">{new Date(inv.invoice_date).toLocaleDateString("en-IN")}</td>
                       <td className="py-2 pr-3 text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{inv.customer_name}</td>
                       <td className="py-2 pr-3">{fmt(inv.subtotal)}</td>
-                      <td className="py-2 pr-3 text-blue-600">{fmt(inv.cgst ?? 0)}</td>
-                      <td className="py-2 pr-3 text-violet-600">{fmt(inv.sgst ?? 0)}</td>
-                      <td className="py-2 pr-3 text-orange-600">{fmt(inv.igst ?? 0)}</td>
+                      <td className="py-2 pr-3 text-blue-600 dark:text-blue-400">{fmt(inv.cgst ?? 0)}</td>
+                      <td className="py-2 pr-3 text-violet-600 dark:text-violet-400">{fmt(inv.sgst ?? 0)}</td>
+                      <td className="py-2 pr-3 text-orange-600 dark:text-orange-400">{fmt(inv.igst ?? 0)}</td>
                       <td className="py-2 font-semibold text-gray-900 dark:text-white">{fmt(inv.total)}</td>
                     </tr>
                   ))}
