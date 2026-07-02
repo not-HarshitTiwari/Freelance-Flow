@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download, MessageCircle } from "lucide-react";
+import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download, MessageCircle, Mail } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 import { downloadQuotePdf } from "@/lib/quote-pdf";
@@ -404,6 +404,16 @@ export default function QuotesPage() {
     }
   }
 
+  async function sendQuoteEmail(id: string) {
+    try {
+      const res = await fetch("/api/quotes/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteId: id }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send email");
+      toast.success("Quote emailed to client!");
+      fetchQuotes();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send email"); }
+  }
+
   async function sendQuoteWhatsApp(id: string) {
     try {
       const res = await fetch("/api/quotes/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteId: id }) });
@@ -572,6 +582,9 @@ export default function QuotesPage() {
                   </button>
                   <button onClick={() => copyReviewLink(q.id)} className="text-gray-400 hover:text-green-600 dark:hover:text-green-400" title="Copy client review link">
                     <Link2 size={15} />
+                  </button>
+                  <button onClick={() => sendQuoteEmail(q.id)} className="text-gray-400 hover:text-blue-500" title="Send by Email">
+                    <Mail size={15} />
                   </button>
                   <button onClick={() => sendQuoteWhatsApp(q.id)} className="text-gray-400 hover:text-green-500" title="Send by WhatsApp">
                     <MessageCircle size={15} />

@@ -88,5 +88,9 @@ export async function GET(req: Request) {
   if (clientData?.name) proposalsQuery = proposalsQuery.ilike("title", `%${clientData.name}%`);
   const { data: proposals } = await proposalsQuery;
 
-  return NextResponse.json({ client: clientData, invoices, proposals, freelancerPlan: freelancerProfile?.plan || "free" });
+  // Split invoices: unpaid/partial first, paid at the bottom (separate key so UI can collapse)
+  const unpaidInvoices = (invoices ?? []).filter(i => i.status !== "paid");
+  const paidInvoices = (invoices ?? []).filter(i => i.status === "paid");
+
+  return NextResponse.json({ client: clientData, invoices: unpaidInvoices, paidInvoices, proposals, freelancerPlan: freelancerProfile?.plan || "free" });
 }

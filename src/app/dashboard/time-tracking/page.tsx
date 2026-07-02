@@ -140,7 +140,7 @@ export default function TimeTrackingPage() {
     if (!toConvert.length) { toast.error("All selected entries are already billed"); return; }
     setConverting(true);
     try {
-      const items = toConvert.map(e => ({ description: `${e.description}${e.client_name ? ` (${e.client_name})` : ""} — ${e.hours}h @ ₹${e.rate}/h`, quantity: 1, rate: e.hours * e.rate }));
+      const items = toConvert.map(e => ({ description: `${e.description}${e.client_name ? ` — ${e.client_name}` : ""}`, quantity: e.hours, rate: e.rate }));
       const params = encodeURIComponent(JSON.stringify(items));
       await Promise.all(toConvert.map(e => fetch("/api/time-entries", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: e.id, billed: true }) })));
       fetchEntries();

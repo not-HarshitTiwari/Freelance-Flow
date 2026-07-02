@@ -15,6 +15,7 @@ type InvRow = {
   customer_company: string | null;
   amount_paid: number | null;
   items: InvItem[] | null;
+  invoice_type?: string | null;
 };
 type ExpRow = { amount: number; date: string; category: string };
 type ProductRow = { id: string; name: string; margin_pct: number | null };
@@ -283,6 +284,7 @@ export function AnalyticsClient({
 
   const rangeInvoices = useMemo(
     () => invoices.filter(i => {
+      if (i.invoice_type === "proforma") return false;
       const dt = new Date(i.invoice_date || i.created_at);
       return dt >= cutoff && dt <= endCutoff;
     }),
@@ -335,6 +337,7 @@ export function AnalyticsClient({
   const monthlyData = useMemo(() => {
     const buildMonth = (y: number, m: number, label: string, fromFilter?: Date, toFilter?: Date) => {
       const mInv = invoices.filter(i => {
+        if (i.invoice_type === "proforma") return false;
         const dt = new Date(i.invoice_date || i.created_at);
         if (dt.getFullYear() !== y || dt.getMonth() !== m) return false;
         if (fromFilter && dt < fromFilter) return false;

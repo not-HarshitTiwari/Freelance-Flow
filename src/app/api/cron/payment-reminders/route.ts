@@ -104,7 +104,56 @@ export async function GET(req: Request) {
     }
   }
 
+  // Pre-due reminders: invoices due in exactly 3 days, not yet reminded
+  const in3Days = new Date();
+  in3Days.setDate(in3Days.getDate() + 3);
+  const in3DaysStr = in3Days.toISOString().slice(0, 10);
+
+  const { data: upcomingInvoices } = await supabase
+    .from("invoices")
+    .select("id, invoice_number, customer_name, customer_email, total, amount_paid, due_date, user_id, payment_link")
+    .in("status", ["unpaid", "partial"])
+    .eq("due_date", in3DaysStr)
+    .not("customer_email", "is", null);
+
+  let preSent = 0;
+  for (const inv of upcomingInvoices ?? []) {
+    const remaining = inv.total - (inv.amount_paid ?? 0);
+    if (remaining <= 0) continue;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("smtp_email, smtp_password, full_name, business_name")
+      .eq("id", inv.user_id)
+      .single();
+    if (!profile?.smtp_email || !profile?.smtp_password) continue;
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com", port: 587, secure: false,
+        auth: { user: profile.smtp_email, pass: profile.smtp_password },
+      });
+      const senderName = profile.business_name || profile.full_name || profile.smtp_email;
+      await transporter.sendMail({
+        from: `"${senderName}" <${profile.smtp_email}>`,
+        to: inv.customer_email,
+        subject: `Upcoming Payment — Invoice ${inv.invoice_number} due in 3 days`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;">
+            <h2 style="color:#7c3aed;">Payment Due Soon</h2>
+            <p>Dear ${inv.customer_name || "Client"},</p>
+            <p>This is a friendly reminder that Invoice <strong>${inv.invoice_number}</strong> for
+            <strong>₹${remaining.toLocaleString("en-IN")}</strong> is due in <strong>3 days</strong>
+            on <strong>${new Date(inv.due_date).toLocaleDateString("en-IN")}</strong>.</p>
+            ${inv.payment_link ? `<a href="${inv.payment_link}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;margin:8px 0 16px">Pay Now ↗</a>` : ""}
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0;" />
+            <p style="color:#666;font-size:13px;">Sent by ${senderName} via FreelanceFlow</p>
+          </div>
+        `,
+      });
+      preSent++;
+    } catch { /* continue */ }
+  }
+
   const lowStockAlertsSent = await sendLowStockAlerts(supabase);
 
-  return NextResponse.json({ sent, lowStockAlertsSent });
+  return NextResponse.json({ sent, preSent, lowStockAlertsSent });
 }

@@ -1,30 +1,31 @@
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceOwnerId } from "@/lib/team";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Receipt, Users, IndianRupee, TrendingUp, Clock, FileSignature } from "lucide-react";
+import { FileText, Receipt, Users, IndianRupee, Clock, FileSignature } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AdBanner } from "@/components/ads/AdBanner";
+import { DashboardStats } from "@/components/dashboard/DashboardStats";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const ownerId = await getWorkspaceOwnerId(supabase, user!.id);
 
-  type InvRow = { total: number; status: string; invoice_date: string; created_at: string; customer_name: string | null; customer_company: string | null; amount_paid: number | null };
+  type InvRow = { total: number; status: string; invoice_date: string; created_at: string; customer_name: string | null; customer_company: string | null; amount_paid: number | null; invoice_type: string | null };
   type ExpRow = { amount: number; date: string };
 
   const [{ count: proposalCount }, { count: clientCount }, { data: rawInvoices }, { data: profile }, { data: rawExpenses }, { count: invoiceCount }] =
     await Promise.all([
       supabase.from("proposals").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
       supabase.from("clients").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
-      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid").eq("user_id", ownerId),
+      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid, invoice_type").eq("user_id", ownerId),
       supabase.from("profiles").select("plan, full_name, business_name, logo_url, signature_url, gstin").eq("id", ownerId).single(),
       supabase.from("expenses").select("amount, date").eq("user_id", ownerId),
       supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
     ]);
 
-  const invoices = (rawInvoices ?? []) as InvRow[];
+  const invoices = ((rawInvoices ?? []) as InvRow[]).filter(i => i.invoice_type !== "proforma");
   const expenses = (rawExpenses ?? []) as ExpRow[];
 
   const isPro = profile?.plan !== "free";
@@ -90,60 +91,12 @@ export default async function DashboardPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
-                <IndianRupee size={18} className="text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Total Earned</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{totalEarned.toLocaleString("en-IN")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                <Receipt size={18} className="text-orange-600 dark:text-orange-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Unpaid</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{unpaidAmount.toLocaleString("en-IN")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-                <IndianRupee size={18} className="text-red-500 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Expenses</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">₹{totalExpenses.toLocaleString("en-IN")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${netProfit >= 0 ? "bg-violet-100 dark:bg-violet-900/40" : "bg-red-100 dark:bg-red-900/40"}`}>
-                <TrendingUp size={18} className={netProfit >= 0 ? "text-violet-600 dark:text-violet-400" : "text-red-500"} />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Net Profit</p>
-                <p className={`text-xl font-bold ${netProfit >= 0 ? "text-gray-900 dark:text-white" : "text-red-500"}`}>₹{netProfit.toLocaleString("en-IN")}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <DashboardStats
+        totalEarned={totalEarned}
+        unpaidAmount={unpaidAmount}
+        totalExpenses={totalExpenses}
+        netProfit={netProfit}
+      />
 
       {!isPro && hasContent && <AdBanner format="horizontal" className="mb-8" />}
 

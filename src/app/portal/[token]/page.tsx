@@ -17,7 +17,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
   const res = await fetch(`${appUrl}/api/portal?token=${token}`, { cache: "no-store" });
   if (!res.ok) notFound();
 
-  const { client, invoices, proposals, freelancerPlan } = await res.json();
+  const { client, invoices, paidInvoices, proposals, freelancerPlan } = await res.json();
   const whiteLabel = freelancerPlan === "advanced";
 
   const totalDue = invoices?.reduce((s: number, i: { status: string; total: number; amount_paid?: number | null }) => {
@@ -127,6 +127,31 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
               </Card>
             ))}
           </div>
+        )}
+
+        {/* Paid invoices — collapsed section */}
+        {paidInvoices?.length > 0 && (
+          <details className="mt-6">
+            <summary className="cursor-pointer text-sm font-medium text-gray-500 hover:text-gray-700 select-none">
+              {paidInvoices.length} paid invoice{paidInvoices.length !== 1 ? "s" : ""} ▸
+            </summary>
+            <div className="space-y-3 mt-3 opacity-70">
+              {paidInvoices.map((inv: { id: string; invoice_number: string; invoice_date: string; total: number }) => (
+                <Card key={inv.id}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-700">{inv.invoice_number}</p>
+                      <p className="text-xs text-gray-400">{new Date(inv.invoice_date).toLocaleDateString("en-IN")}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600 font-medium">₹{inv.total.toLocaleString("en-IN")}</span>
+                      <Badge className="bg-green-100 text-green-700">paid</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </details>
         )}
 
         {/* Proposals */}
