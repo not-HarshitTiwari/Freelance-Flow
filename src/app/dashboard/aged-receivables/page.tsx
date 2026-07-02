@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Download, AlertTriangle } from "lucide-react";
+import { Download, AlertTriangle, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 type InvRow = {
   id: string;
@@ -12,6 +13,7 @@ type InvRow = {
   due_date: string | null;
   customer_name: string | null;
   customer_company: string | null;
+  customer_email: string | null;
   total: number;
   amount_paid: number | null;
   status: string;
@@ -46,6 +48,18 @@ export default function AgedReceivablesPage() {
   const [invoices, setInvoices] = useState<InvRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterBucket, setFilterBucket] = useState<string | null>(null);
+  const [reminding, setReminding] = useState<string | null>(null);
+
+  async function sendReminder(id: string, email: string) {
+    setReminding(id);
+    try {
+      const res = await fetch("/api/invoices/remind", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceId: id }) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      toast.success(`Reminder sent to ${email}`);
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed"); }
+    finally { setReminding(null); }
+  }
 
   useEffect(() => {
     fetch("/api/invoices")
@@ -162,6 +176,7 @@ export default function AgedReceivablesPage() {
                 <th className="px-4 py-3 font-semibold text-right">Total</th>
                 <th className="px-4 py-3 font-semibold text-right">Paid</th>
                 <th className="px-4 py-3 font-semibold text-right">Balance</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
@@ -181,12 +196,19 @@ export default function AgedReceivablesPage() {
                   <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">{fmt(r.total)}</td>
                   <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">{fmt(r.amount_paid ?? 0)}</td>
                   <td className="px-4 py-3 text-right font-bold text-red-600 dark:text-red-400">{fmt(r.balance)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.customer_email && (
+                      <button onClick={() => sendReminder(r.id, r.customer_email!)} disabled={reminding === r.id} title="Send reminder email" className="text-gray-400 hover:text-amber-500 disabled:opacity-40">
+                        <Bell size={14} className={reminding === r.id ? "animate-pulse" : ""} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-bold">
-                <td colSpan={4} className="px-4 py-3 text-gray-900 dark:text-white">Total</td>
+                <td colSpan={5} className="px-4 py-3 text-gray-900 dark:text-white">Total</td>
                 <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
                   {fmt(filtered.reduce((s, r) => s + r.total, 0))}
                 </td>

@@ -13,9 +13,9 @@ function fmt(n: number, sym: string) {
 }
 
 export function DashboardStats({
-  totalEarned, unpaidAmount, totalExpenses, netProfit,
+  totalEarned, unpaidAmount, totalExpenses, netProfit, overdueCount,
 }: {
-  totalEarned: number; unpaidAmount: number; totalExpenses: number; netProfit: number;
+  totalEarned: number; unpaidAmount: number; totalExpenses: number; netProfit: number; overdueCount?: number;
 }) {
   const [sym, setSym] = useState("₹");
   useEffect(() => {
@@ -45,7 +45,12 @@ export function DashboardStats({
               <Receipt size={18} className="text-orange-600 dark:text-orange-400" />
             </div>
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Unpaid</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Unpaid</p>
+                {(overdueCount ?? 0) > 0 && (
+                  <span className="text-xs bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400 font-semibold px-1.5 py-0.5 rounded-full">{overdueCount} overdue</span>
+                )}
+              </div>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(unpaidAmount, sym)}</p>
             </div>
           </div>

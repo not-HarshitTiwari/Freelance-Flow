@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, IndianRupee, Receipt, CalendarDays } from "lucide-react";
+import { Search, IndianRupee, Receipt, CalendarDays, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type Payment = {
   id: string;
@@ -23,6 +24,7 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
 
   const fetchPayments = useCallback(async () => {
     const res = await fetch("/api/payments");
@@ -35,29 +37,46 @@ export default function PaymentsPage() {
 
   const filtered = payments.filter(p => {
     const q = searchQ.toLowerCase();
-    if (!q) return true;
-    return (
-      (p.invoices?.invoice_number || "").toLowerCase().includes(q) ||
-      (p.invoices?.customer_name || "").toLowerCase().includes(q) ||
-      (p.invoices?.customer_company || "").toLowerCase().includes(q) ||
-      (p.note || "").toLowerCase().includes(q)
-    );
+    const matchQ = !q || (p.invoices?.invoice_number || "").toLowerCase().includes(q) || (p.invoices?.customer_name || "").toLowerCase().includes(q) || (p.invoices?.customer_company || "").toLowerCase().includes(q) || (p.note || "").toLowerCase().includes(q);
+    const matchMonth = !monthFilter || p.paid_at.startsWith(monthFilter);
+    return matchQ && matchMonth;
   });
 
   const totalReceived = filtered.reduce((s, p) => s + p.amount, 0);
   const now = new Date();
   const thisMonthTotal = payments
-    .filter(p => {
-      const d = new Date(p.paid_at);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    })
+    .filter(p => { const d = new Date(p.paid_at); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); })
     .reduce((s, p) => s + p.amount, 0);
+
+  function exportCSV() {
+    const rows = [["Date", "Invoice #", "Customer", "Method", "Note", "Amount (₹)"]];
+    for (const p of filtered) {
+      rows.push([
+        new Date(p.paid_at).toLocaleDateString("en-IN"),
+        p.invoices?.invoice_number || "",
+        p.invoices?.customer_name || "",
+        p.method || "",
+        p.note || "",
+        String(p.amount),
+      ]);
+    }
+    const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: "payments.csv" });
+    a.click();
+  }
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payments</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Every payment recorded against your invoices</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payments</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Every payment recorded against your invoices</p>
+        </div>
+        {payments.length > 0 && (
+          <Button onClick={exportCSV} variant="outline" className="gap-2 dark:border-gray-600 dark:text-gray-300 h-8 text-sm px-3">
+            <Download size={15} /> Export CSV
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -103,9 +122,13 @@ export default function PaymentsPage() {
       </div>
 
       {payments.length > 0 && (
-        <div className="relative mb-4 max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search by invoice, client, or note…" value={searchQ} onChange={e => setSearchQ(e.target.value)} className="pl-9 h-9 text-sm" />
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="relative flex-1 min-w-48">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Input placeholder="Search by invoice, client, or note…" value={searchQ} onChange={e => setSearchQ(e.target.value)} className="pl-9 h-9 text-sm" />
+          </div>
+          <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="h-9 text-sm w-40" title="Filter by month" />
+          {monthFilter && <button onClick={() => setMonthFilter("")} className="text-xs text-violet-500 underline px-1">Clear</button>}
         </div>
       )}
 
@@ -120,8 +143,8 @@ export default function PaymentsPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400 dark:text-gray-600">
           <Search size={36} className="mx-auto mb-3 opacity-30" />
-          <p className="text-base font-medium dark:text-gray-400">No payments match your search</p>
-          <button onClick={() => setSearchQ("")} className="text-sm text-violet-500 underline mt-1">Clear search</button>
+          <p className="text-base font-medium dark:text-gray-400">No payments match your filter</p>
+          <button onClick={() => { setSearchQ(""); setMonthFilter(""); }} className="text-sm text-violet-500 underline mt-1">Clear filters</button>
         </div>
       ) : (
         <div className="space-y-3">

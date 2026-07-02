@@ -75,3 +75,28 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ creditNote });
 }
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
+
+  const { id } = await request.json();
+
+  const { data: cn } = await supabase.from("credit_notes").select("invoice_id, amount").eq("id", id).eq("user_id", ownerId).single();
+  if (!cn) return NextResponse.json({ error: "Credit note not found" }, { status: 404 });
+
+  const { data: invoice } = await supabase.from("invoices").select("amount_paid, total").eq("id", cn.invoice_id).eq("user_id", ownerId).single();
+  if (invoice) {
+    const newAmountPaid = Math.max(0, (invoice.amount_paid ?? 0) - cn.amount);
+    const newStatus = newAmountPaid <= 0 ? "unpaid" : newAmountPaid >= invoice.total ? "paid" : "partial";
+    await supabase.from("invoices").update({ amount_paid: newAmountPaid, status: newStatus }).eq("id", cn.invoice_id).eq("user_id", ownerId);
+  }
+
+  await supabase.from("credit_notes").delete().eq("id", id).eq("user_id", ownerId);
+  return NextResponse.json({ success: true });
+}

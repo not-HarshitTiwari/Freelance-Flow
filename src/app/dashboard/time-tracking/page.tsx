@@ -166,12 +166,16 @@ export default function TimeTrackingPage() {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const totalValue = entries.reduce((s, e) => s + e.hours * e.rate, 0);
-  const unbilledEntries = entries.filter(e => !e.billed);
+  const [clientFilter, setClientFilter] = useState("");
+  const uniqueClients = Array.from(new Set(entries.map(e => e.client_name).filter(Boolean))) as string[];
+  const visibleEntries = clientFilter ? entries.filter(e => e.client_name === clientFilter) : entries;
+
+  const totalHours = visibleEntries.reduce((s, e) => s + e.hours, 0);
+  const totalValue = visibleEntries.reduce((s, e) => s + e.hours * e.rate, 0);
+  const unbilledEntries = visibleEntries.filter(e => !e.billed);
   const unbilledHours = unbilledEntries.reduce((s, e) => s + e.hours, 0);
   const unbilledValue = unbilledEntries.reduce((s, e) => s + e.hours * e.rate, 0);
-  const selectedEntries = entries.filter(e => selected.has(e.id));
+  const selectedEntries = visibleEntries.filter(e => selected.has(e.id));
   const selectedValue = selectedEntries.reduce((s, e) => s + e.hours * e.rate, 0);
 
   return (
@@ -181,7 +185,13 @@ export default function TimeTrackingPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Time Tracking</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Track billable hours and convert to invoices</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          {uniqueClients.length > 0 && (
+            <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-xs outline-none">
+              <option value="">All clients</option>
+              {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           {entries.length > 0 && canExportCSV && (
             <Button onClick={exportCSV} variant="outline" className="gap-2 h-8 text-sm px-3 dark:border-gray-600 dark:text-gray-300">
               <Download size={15} /> Export CSV
@@ -250,9 +260,14 @@ export default function TimeTrackingPage() {
           <p className="text-lg font-medium dark:text-gray-400">No time entries yet</p>
           <p className="text-sm">Start the timer or log hours manually</p>
         </div>
+      ) : visibleEntries.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 dark:text-gray-600">
+          <p className="font-medium dark:text-gray-400">No entries for this client</p>
+          <button onClick={() => setClientFilter("")} className="text-sm text-violet-500 underline mt-1">Clear filter</button>
+        </div>
       ) : (
         <div className="space-y-2">
-          {entries.map(e => (
+          {visibleEntries.map(e => (
             <Card key={e.id} className={`transition-colors ${selected.has(e.id) ? "border-violet-400 dark:border-violet-600 bg-violet-50/50 dark:bg-violet-900/10" : ""}`}>
               <CardContent className="p-4 flex items-center gap-3">
                 <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} className="w-4 h-4 accent-violet-600" />

@@ -12,14 +12,14 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   const ownerId = await getWorkspaceOwnerId(supabase, user!.id);
 
-  type InvRow = { total: number; status: string; invoice_date: string; created_at: string; customer_name: string | null; customer_company: string | null; amount_paid: number | null; invoice_type: string | null };
+  type InvRow = { total: number; status: string; invoice_date: string; created_at: string; customer_name: string | null; customer_company: string | null; amount_paid: number | null; invoice_type: string | null; due_date: string | null };
   type ExpRow = { amount: number; date: string };
 
   const [{ count: proposalCount }, { count: clientCount }, { data: rawInvoices }, { data: profile }, { data: rawExpenses }, { count: invoiceCount }] =
     await Promise.all([
       supabase.from("proposals").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
       supabase.from("clients").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
-      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid, invoice_type").eq("user_id", ownerId),
+      supabase.from("invoices").select("total, status, invoice_date, created_at, customer_name, customer_company, amount_paid, invoice_type, due_date").eq("user_id", ownerId),
       supabase.from("profiles").select("plan, full_name, business_name, logo_url, signature_url, gstin").eq("id", ownerId).single(),
       supabase.from("expenses").select("amount, date").eq("user_id", ownerId),
       supabase.from("invoices").select("*", { count: "exact", head: true }).eq("user_id", ownerId),
@@ -47,6 +47,8 @@ export default async function DashboardPage() {
     s + (i.status === "unpaid" ? i.total : i.status === "partial" ? i.total - (i.amount_paid ?? 0) : 0), 0);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netProfit = totalEarned - totalExpenses;
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueCount = invoices.filter(i => (i.status === "overdue") || (i.status === "unpaid" && i.due_date && i.due_date < today)).length;
 
   const name = (user?.user_metadata?.full_name as string)?.split(" ")[0] || "there";
   const hasContent = (proposalCount ?? 0) + (clientCount ?? 0) > 0;
@@ -96,6 +98,7 @@ export default async function DashboardPage() {
         unpaidAmount={unpaidAmount}
         totalExpenses={totalExpenses}
         netProfit={netProfit}
+        overdueCount={overdueCount}
       />
 
       {!isPro && hasContent && <AdBanner format="horizontal" className="mb-8" />}

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy, Undo2 } from "lucide-react";
+import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy, Undo2, ArrowRightCircle } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
@@ -480,6 +480,9 @@ function InvoicesPageInner() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -693,6 +696,14 @@ function InvoicesPageInner() {
         throw new Error(data.error || "Failed to send WhatsApp message");
       }
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send WhatsApp message"); }
+  }
+
+  async function convertProforma(inv: Invoice) {
+    if (!confirm(`Convert "${inv.invoice_number}" from Proforma to a real Invoice? It will appear in revenue reports.`)) return;
+    const res = await fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: inv.id, invoice_type: "invoice" }) });
+    const data = await res.json();
+    if (data.error) toast.error(data.error);
+    else { toast.success("Converted to Invoice"); fetchInvoices(); }
   }
 
   async function sendReminder(inv: Invoice) {
@@ -1027,11 +1038,16 @@ function InvoicesPageInner() {
   const sectionStyle = "border dark:border-gray-700 rounded-lg p-4 space-y-3";
   const sectionTitle = "font-semibold text-sm text-gray-700 dark:text-gray-300";
 
+  const uniqueClients = Array.from(new Set(invoices.map(i => i.customer_name).filter(Boolean))) as string[];
+
   const filteredInvoices = invoices.filter(inv => {
     const q = searchQuery.toLowerCase();
     const matchQuery = !q || inv.invoice_number.toLowerCase().includes(q) || (inv.customer_name || "").toLowerCase().includes(q) || (inv.customer_company || "").toLowerCase().includes(q);
     const matchStatus = statusFilter === "all" || inv.status === statusFilter;
-    return matchQuery && matchStatus;
+    const matchDateFrom = !dateFrom || inv.invoice_date >= dateFrom;
+    const matchDateTo = !dateTo || inv.invoice_date <= dateTo;
+    const matchClient = !clientFilter || (inv.customer_name || "") === clientFilter;
+    return matchQuery && matchStatus && matchDateFrom && matchDateTo && matchClient;
   });
   const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE);
   const pagedInvoices = filteredInvoices.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -1327,24 +1343,39 @@ function InvoicesPageInner() {
 
       {/* Search + Filter */}
       {invoices.length > 0 && (
-        <div className="flex flex-wrap gap-3 mb-4">
-          <div className="relative flex-1 min-w-48">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search by name or invoice #"
-              value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-              className="pl-9 h-9 text-sm"
-            />
+        <div className="space-y-2 mb-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search by name or invoice #"
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <div className="flex gap-1.5">
+              {["all", "unpaid", "partial", "paid", "overdue"].map(s => (
+                <button
+                  key={s}
+                  onClick={() => { setStatusFilter(s); setPage(0); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border capitalize transition-colors ${statusFilter === s ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-violet-400"}`}
+                >{s}</button>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-1.5">
-            {["all", "unpaid", "partial", "paid", "overdue"].map(s => (
-              <button
-                key={s}
-                onClick={() => { setStatusFilter(s); setPage(0); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border capitalize transition-colors ${statusFilter === s ? "bg-violet-600 text-white border-violet-600" : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-violet-400"}`}
-              >{s}</button>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0); }} className="h-8 text-xs w-36" title="From date" />
+            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0); }} className="h-8 text-xs w-36" title="To date" />
+            {uniqueClients.length > 0 && (
+              <select value={clientFilter} onChange={e => { setClientFilter(e.target.value); setPage(0); }} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-xs outline-none">
+                <option value="">All clients</option>
+                {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            {(dateFrom || dateTo || clientFilter) && (
+              <button onClick={() => { setDateFrom(""); setDateTo(""); setClientFilter(""); setPage(0); }} className="text-xs text-violet-500 underline px-1">Clear</button>
+            )}
           </div>
         </div>
       )}
@@ -1404,7 +1435,12 @@ function InvoicesPageInner() {
                       <p className="text-xs text-blue-500">₹{(inv.amount_paid ?? 0).toLocaleString("en-IN")} paid</p>
                     )}
                   </div>
-                  {inv.invoice_type === "proforma" && <Badge className="bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300">Proforma</Badge>}
+                  {inv.invoice_type === "proforma" && (
+                    <>
+                      <Badge className="bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300">Proforma</Badge>
+                      <button onClick={() => convertProforma(inv)} title="Convert to Invoice" className="text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"><ArrowRightCircle size={15} /></button>
+                    </>
+                  )}
                   <Badge className={statusColors[inv.status] || ""}>{inv.status}</Badge>
                   {inv.is_recurring && (
                     <span title={inv.next_invoice_date ? `Next: ${new Date(inv.next_invoice_date).toLocaleDateString("en-IN")}` : "Recurring"} className="flex items-center gap-1 text-xs text-violet-400">

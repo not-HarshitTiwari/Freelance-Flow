@@ -112,7 +112,7 @@ export default function ExpensesPage() {
 
   function exportCSV() {
     const rows = [["Date", "Title", "Category", "Amount (₹)", "Notes", "Receipt"]];
-    for (const e of expenses) {
+    for (const e of filteredExpenses) {
       rows.push([e.date, e.title, e.category, String(e.amount), e.notes || "", e.receipt_url || ""]);
     }
     const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -122,10 +122,16 @@ export default function ExpensesPage() {
     URL.revokeObjectURL(url);
   }
 
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const [monthFilter, setMonthFilter] = useState("");
+
+  const filteredExpenses = monthFilter
+    ? expenses.filter(e => e.date.startsWith(monthFilter))
+    : expenses;
+
+  const total = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
   // Group by category
-  const byCategory = expenses.reduce<Record<string, number>>((acc, e) => {
+  const byCategory = filteredExpenses.reduce<Record<string, number>>((acc, e) => {
     acc[e.category] = (acc[e.category] || 0) + e.amount;
     return acc;
   }, {});
@@ -279,15 +285,29 @@ export default function ExpensesPage() {
 
       {!isPro && expenses.length > 0 && <AdBanner format="horizontal" className="mb-6" />}
 
+      {expenses.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-sm text-gray-500 dark:text-gray-400 shrink-0">Month:</label>
+          <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="h-8 text-sm w-40" />
+          {monthFilter && <button onClick={() => setMonthFilter("")} className="text-xs text-violet-500 underline">Clear</button>}
+          {monthFilter && <span className="text-xs text-gray-400">{filteredExpenses.length} expense{filteredExpenses.length !== 1 ? "s" : ""}</span>}
+        </div>
+      )}
+
       {expenses.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <IndianRupee size={48} className="mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium dark:text-gray-400">No expenses yet</p>
           <p className="text-sm">Log your first expense to track profit</p>
         </div>
+      ) : filteredExpenses.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 dark:text-gray-600">
+          <p className="text-base font-medium dark:text-gray-400">No expenses in this period</p>
+          <button onClick={() => setMonthFilter("")} className="text-sm text-violet-500 underline mt-1">Clear filter</button>
+        </div>
       ) : (
         <div className="space-y-2">
-          {expenses.map((e, i) => (
+          {filteredExpenses.map((e, i) => (
             <div key={e.id}>
               {!isPro && i > 0 && i % 5 === 0 && <AdBanner format="rectangle" className="my-3" />}
               <Card>

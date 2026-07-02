@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, TrendingUp, CalendarDays, Download, Plus, Trash2 } from "lucide-react";
+import { Search, TrendingUp, CalendarDays, Download, Plus, Trash2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 
 type DebitNote = {
@@ -68,6 +68,28 @@ export default function DebitNotesPage() {
     toast.success("Debit note issued");
     setOpen(false);
     fetchDebitNotes();
+  }
+
+  async function downloadPdf(d: DebitNote) {
+    const { default: jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    doc.setFillColor(22, 163, 74); doc.rect(0, 0, 210, 28, "F");
+    doc.setTextColor(255, 255, 255); doc.setFontSize(20); doc.setFont("helvetica", "bold");
+    doc.text("DEBIT NOTE", 14, 18);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text(`#${d.debit_note_number}`, 14, 24);
+    doc.text(`Date: ${new Date(d.created_at).toLocaleDateString("en-IN")}`, 140, 18);
+    doc.setTextColor(30, 30, 30); doc.setFontSize(11);
+    let y = 45;
+    if (d.invoices?.invoice_number) { doc.text(`Against Invoice: ${d.invoices.invoice_number}`, 14, y); y += 8; }
+    if (d.invoices?.customer_name) { doc.text(`Customer: ${d.invoices.customer_name}`, 14, y); y += 8; }
+    if (d.reason) { doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text(`Reason: ${d.reason}`, 14, y); y += 8; }
+    y += 4;
+    doc.setFillColor(240, 253, 244); doc.rect(14, y, 182, 16, "F");
+    doc.setTextColor(22, 163, 74); doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.text("Debit Amount:", 16, y + 10);
+    doc.text(`₹${d.amount.toLocaleString("en-IN")}`, 160, y + 10);
+    doc.save(`${d.debit_note_number}.pdf`);
   }
 
   async function handleDelete(id: string) {
@@ -203,9 +225,8 @@ export default function DebitNotesPage() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <p className="text-lg font-semibold text-green-600 dark:text-green-400">+{fmt(d.amount)}</p>
-                  <button onClick={() => handleDelete(d.id)} className="text-red-400 hover:text-red-600 p-1">
-                    <Trash2 size={15} />
-                  </button>
+                  <button onClick={() => downloadPdf(d)} className="text-gray-400 hover:text-green-600 p-1" title="Download PDF"><FileDown size={15} /></button>
+                  <button onClick={() => handleDelete(d.id)} className="text-red-400 hover:text-red-600 p-1" title="Delete"><Trash2 size={15} /></button>
                 </div>
               </CardContent>
             </Card>

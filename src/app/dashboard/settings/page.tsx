@@ -81,6 +81,18 @@ export default function SettingsPage() {
     inv_seq_digits: 4, inv_next_seq: 1,
   });
   const [savingInvFmt, setSavingInvFmt] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+
+  async function testSmtpEmail() {
+    setTestingSmtp(true);
+    try {
+      const res = await fetch("/api/test-email", { method: "POST" });
+      const data = await res.json();
+      if (data.error) toast.error(data.error);
+      else toast.success(`Test email sent to ${data.to}`);
+    } catch { toast.error("Test failed"); }
+    finally { setTestingSmtp(false); }
+  }
 
   // Team state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -468,6 +480,9 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
+            <Button type="button" variant="outline" onClick={testSmtpEmail} disabled={testingSmtp || !f.smtp_email || !f.smtp_password} className="w-full dark:border-gray-600 dark:text-gray-300">
+              {testingSmtp ? "Sending test…" : "Send Test Email"}
+            </Button>
           </CardContent>
         </Card>
 

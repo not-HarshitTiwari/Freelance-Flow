@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Undo2, CalendarDays, Download, Plus } from "lucide-react";
+import { Search, Undo2, CalendarDays, Download, Plus, Trash2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 
 type CreditNote = {
@@ -52,6 +52,39 @@ export default function CreditNotesPage() {
     }
     setForm({ invoiceId: "", amount: "", reason: "" });
     setOpen(true);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this credit note? The invoice balance will be restored.")) return;
+    const res = await fetch("/api/credit-notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) { toast.success("Credit note deleted"); fetchCreditNotes(); }
+    else { const d = await res.json(); toast.error(d.error); }
+  }
+
+  async function downloadPdf(c: CreditNote) {
+    const { default: jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    doc.setFillColor(124, 58, 237); doc.rect(0, 0, 210, 28, "F");
+    doc.setTextColor(255, 255, 255); doc.setFontSize(20); doc.setFont("helvetica", "bold");
+    doc.text("CREDIT NOTE", 14, 18);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text(`#${c.credit_note_number}`, 14, 24);
+    doc.text(`Date: ${new Date(c.created_at).toLocaleDateString("en-IN")}`, 140, 18);
+    doc.setTextColor(30, 30, 30); doc.setFontSize(11);
+    let y = 45;
+    if (c.invoices?.invoice_number) { doc.text(`Against Invoice: ${c.invoices.invoice_number}`, 14, y); y += 8; }
+    if (c.invoices?.customer_name) { doc.text(`Customer: ${c.invoices.customer_name}`, 14, y); y += 8; }
+    if (c.reason) { doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text(`Reason: ${c.reason}`, 14, y); y += 8; }
+    y += 4;
+    doc.setFillColor(245, 243, 255); doc.rect(14, y, 182, 16, "F");
+    doc.setTextColor(124, 58, 237); doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.text("Credit Amount:", 16, y + 10);
+    doc.text(`₹${c.amount.toLocaleString("en-IN")}`, 160, y + 10);
+    doc.save(`${c.credit_note_number}.pdf`);
   }
 
   async function handleCreate() {
@@ -193,7 +226,11 @@ export default function CreditNotesPage() {
                     {c.reason && ` • ${c.reason}`}
                   </p>
                 </div>
-                <p className="text-lg font-semibold text-orange-600 dark:text-orange-400 shrink-0">-{fmt(c.amount)}</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  <p className="text-lg font-semibold text-orange-600 dark:text-orange-400">-{fmt(c.amount)}</p>
+                  <button onClick={() => downloadPdf(c)} className="text-gray-400 hover:text-violet-600 p-1" title="Download PDF"><FileDown size={15} /></button>
+                  <button onClick={() => handleDelete(c.id)} className="text-red-400 hover:text-red-600 p-1" title="Delete"><Trash2 size={15} /></button>
+                </div>
               </CardContent>
             </Card>
           ))}

@@ -1,50 +1,58 @@
 import { createClient } from "@/lib/supabase/server";
-import { Resend } from "resend";
 import { NextResponse } from "next/server";
-
-const resend = new Resend(process.env.RESEND_API_KEY!);
+import nodemailer from "nodemailer";
+import { getWorkspaceOwnerId, getWorkspaceRole, canWrite } from "@/lib/team";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ownerId = await getWorkspaceOwnerId(supabase, user.id);
+  const role = await getWorkspaceRole(supabase, user.id);
+  if (!canWrite(role)) return NextResponse.json({ error: "Your role doesn't allow this action." }, { status: 403 });
+
   const { invoiceId } = await request.json();
 
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("*, clients(name, email), profiles(full_name, business_name)")
-    .eq("id", invoiceId)
-    .eq("user_id", user.id)
-    .single();
+  const [{ data: invoice }, { data: profile }] = await Promise.all([
+    supabase.from("invoices").select("*").eq("id", invoiceId).eq("user_id", ownerId).single(),
+    supabase.from("profiles").select("smtp_email, smtp_password, full_name, business_name").eq("id", ownerId).single(),
+  ]);
 
-  if (!invoice || !invoice.clients?.email) {
-    return NextResponse.json({ error: "Invoice or client not found" }, { status: 404 });
+  if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  if (!invoice.customer_email) return NextResponse.json({ error: "No customer email on this invoice" }, { status: 400 });
+  if (!profile?.smtp_email || !profile?.smtp_password) {
+    return NextResponse.json({ error: "Configure Gmail SMTP in Settings first" }, { status: 400 });
   }
 
-  const senderName = invoice.profiles?.business_name || invoice.profiles?.full_name || "Your Freelancer";
-  const clientName = invoice.clients.name;
-  const amount = `₹${invoice.total.toLocaleString("en-IN")}`;
-  const dueDate = invoice.due_date
+  const senderName = profile.business_name || profile.full_name || profile.smtp_email;
+  const balance = invoice.total - (invoice.amount_paid ?? 0);
+  const dueStr = invoice.due_date
     ? new Date(invoice.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
     : "as soon as possible";
 
   try {
-    await resend.emails.send({
-      from: "FreelanceFlow <noreply@freelanceflow.in>",
-      to: invoice.clients.email,
-      subject: `Payment Reminder: Invoice ${invoice.invoice_number} — ${amount}`,
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com", port: 587, secure: false,
+      auth: { user: profile.smtp_email, pass: profile.smtp_password },
+    });
+
+    await transporter.sendMail({
+      from: `"${senderName}" <${profile.smtp_email}>`,
+      to: invoice.customer_email,
+      subject: `Payment Reminder — Invoice ${invoice.invoice_number}`,
       html: `
-        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; color: #333;">
-          <h2 style="color: #7c3aed;">Payment Reminder</h2>
-          <p>Hi ${clientName},</p>
-          <p>This is a friendly reminder that invoice <strong>${invoice.invoice_number}</strong> for <strong>${amount}</strong> is due by <strong>${dueDate}</strong>.</p>
-          <div style="background: #f5f3ff; border-left: 4px solid #7c3aed; padding: 16px; margin: 24px 0; border-radius: 4px;">
-            <p style="margin: 0;"><strong>Invoice:</strong> ${invoice.invoice_number}</p>
-            <p style="margin: 8px 0 0;"><strong>Amount:</strong> ${amount}</p>
-            <p style="margin: 8px 0 0;"><strong>Due Date:</strong> ${dueDate}</p>
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;">
+          <h2 style="color:#7c3aed;">Payment Reminder</h2>
+          <p>Dear ${invoice.customer_name || "Client"},</p>
+          <p>This is a friendly reminder that invoice <strong>${invoice.invoice_number}</strong> for
+          <strong>₹${balance.toLocaleString("en-IN")}</strong> is due by <strong>${dueStr}</strong>.</p>
+          <div style="background:#f5f3ff;border-left:4px solid #7c3aed;padding:16px;margin:20px 0;border-radius:4px;">
+            <p style="margin:0"><strong>Invoice:</strong> ${invoice.invoice_number}</p>
+            <p style="margin:8px 0 0"><strong>Balance Due:</strong> ₹${balance.toLocaleString("en-IN")}</p>
+            <p style="margin:8px 0 0"><strong>Due:</strong> ${dueStr}</p>
           </div>
-          <p>Please process the payment at your earliest convenience. If you have any questions, feel free to reply to this email.</p>
+          ${invoice.payment_link ? `<a href="${invoice.payment_link}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;margin:8px 0 16px">Pay Now ↗</a>` : ""}
           <p>Thank you for your business!</p>
           <p>Best regards,<br/><strong>${senderName}</strong></p>
         </div>
@@ -53,7 +61,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: `Failed to send email: ${msg}` }, { status: 500 });
   }
 }
