@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { TwoFactorSettings } from "@/components/dashboard/TwoFactorSettings";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type PdfTemplate = "classic" | "minimal" | "bold";
 const PDF_TEMPLATES: { id: PdfTemplate; label: string }[] = [
@@ -103,6 +104,7 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
   const [inviting, setInviting] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -189,12 +191,17 @@ export default function SettingsPage() {
   }
 
   async function removeMember(memberId: string) {
-    if (!confirm("Remove this team member?")) return;
-    const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId }) });
-    const data = await res.json();
-    if (!res.ok) { toast.error(data.error); return; }
-    toast.success("Member removed");
-    setTeamMembers(ms => ms.filter(m => m.id !== memberId));
+    setPendingConfirm({
+      title: "Remove Team Member",
+      desc: "Remove this team member? They will lose access to the workspace.",
+      action: async () => {
+        const res = await fetch("/api/team", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId }) });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
+        toast.success("Member removed");
+        setTeamMembers(ms => ms.filter(m => m.id !== memberId));
+      }
+    });
   }
 
   // ── Logo upload ───────────────────────────────────────────────
@@ -780,6 +787,9 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
+      )}
     </div>
   );
 }

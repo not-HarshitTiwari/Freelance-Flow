@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import Image from "next/image";
+import { Zap } from "lucide-react";
 import { PayNowButton } from "@/components/portal/PayNowButton";
 
 const statusColors: Record<string, string> = {
-  paid: "bg-green-100 text-green-700",
-  unpaid: "bg-orange-100 text-orange-700",
-  partial: "bg-blue-100 text-blue-700",
+  paid: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  unpaid: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  partial: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
 };
 
 export default async function ClientPortalPage({ params }: { params: Promise<{ token: string }> }) {
@@ -30,7 +30,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
       <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-6 py-4 flex items-center gap-3">
-        <Image src="/logo.png" alt="FreelanceFlow" width={28} height={28} className="rounded-sm" />
+        <Zap size={22} className="text-violet-600" />
         <span className="font-bold text-gray-900 dark:text-white">FreelanceFlow</span>
         <span className="text-gray-300 dark:text-gray-700 ml-1">|</span>
         <span className="text-gray-500 dark:text-gray-400 text-sm">Client Portal</span>
@@ -145,7 +145,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-600 dark:text-gray-300 font-medium">₹{inv.total.toLocaleString("en-IN")}</span>
-                      <Badge className="bg-green-100 text-green-700">paid</Badge>
+                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">paid</Badge>
                     </div>
                   </CardContent>
                 </Card>
@@ -170,9 +170,9 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                       </p>
                     </div>
                     <Badge className={
-                      p.status === "accepted" ? "bg-green-100 text-green-700" :
-                      p.status === "sent" ? "bg-blue-100 text-blue-700" :
-                      "bg-gray-100 text-gray-600"
+                      p.status === "accepted" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" :
+                      p.status === "sent" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+                      "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                     }>{p.status}</Badge>
                   </CardContent>
                 </Card>

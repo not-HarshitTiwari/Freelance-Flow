@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle, Zap } from "lucide-react";
 import { use } from "react";
+import { toast } from "sonner";
 
 type Contract = { id: string; title: string; client_name: string | null; body: string; status: string; signed_at: string | null };
 
@@ -33,7 +34,7 @@ export default function SignPage({ params }: { params: Promise<{ token: string }
     });
     const data = await res.json();
     if (data.success) setDone(true);
-    else alert(data.error || "Failed to sign. The link may be expired or already used.");
+    else toast.error(data.error || "Failed to sign. The link may be expired or already used.");
     setSigning(false);
   }
 

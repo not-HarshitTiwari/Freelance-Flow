@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Users, Mail, Phone, Building2, MapPin, Trash2, Pencil, Link2, Send, Upload, Download, Loader2 } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Client = {
   id: string;
@@ -44,6 +45,7 @@ export default function ClientsPage() {
   const [gstLooking, setGstLooking] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [clientStats, setClientStats] = useState<Record<string, { invoiced: number; outstanding: number }>>({});
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -112,13 +114,18 @@ export default function ClientsPage() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", ownerId)
       .or(`customer_name.eq.${name},customer_email.eq.${email}`);
-    const msg = count && count > 0
+    const desc = count && count > 0
       ? `This client has ${count} invoice(s) linked. Deleting the client won't delete those invoices. Continue?`
       : "Delete this client? This cannot be undone.";
-    if (!confirm(msg)) return;
-    const { error } = await supabase.from("clients").delete().eq("id", id);
-    if (error) toast.error("Failed to delete client");
-    else { toast.success("Client deleted"); fetchClients(); }
+    setPendingConfirm({
+      title: "Delete Client",
+      desc,
+      action: async () => {
+        const { error } = await supabase.from("clients").delete().eq("id", id);
+        if (error) toast.error("Failed to delete client");
+        else { toast.success("Client deleted"); fetchClients(); }
+      }
+    });
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -457,6 +464,9 @@ export default function ClientsPage() {
       )}
 
       {!isPro && clients.length > 0 && <AdBanner format="rectangle" className="mt-8 max-w-sm mx-auto" />}
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
+      )}
     </div>
   );
 }

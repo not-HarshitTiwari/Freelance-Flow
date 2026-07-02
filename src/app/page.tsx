@@ -40,13 +40,49 @@ const features = [
   },
 ];
 
-const pricingFeatures = [
-  "AI proposal generation (unlimited)",
-  "Invoice creation & tracking",
-  "Client management",
-  "Automated payment reminders",
-  "UPI & card payments via Razorpay",
-  "Email support",
+const pricingPlans = [
+  {
+    key: "basic",
+    label: "Basic",
+    price: 499,
+    highlight: false,
+    borderColor: "border-blue-400",
+    features: [
+      "Unlimited invoices & clients",
+      "All 3 PDF templates",
+      "Invoice & proposal email sending",
+      "Contracts with e-signatures",
+      "CSV exports",
+      "No ads",
+    ],
+  },
+  {
+    key: "pro",
+    label: "Pro",
+    price: 999,
+    highlight: true,
+    borderColor: "border-violet-600",
+    features: [
+      "Everything in Basic",
+      "AI proposal generation",
+      "Recurring invoices (auto-generate)",
+      "Razorpay payment links",
+      "Automated payment reminders",
+    ],
+  },
+  {
+    key: "advanced",
+    label: "Advanced",
+    price: 1999,
+    highlight: false,
+    borderColor: "border-amber-400",
+    features: [
+      "Everything in Pro",
+      "Bulk invoice operations",
+      "Multi-currency PDF",
+      "White-label client portal",
+    ],
+  },
 ];
 
 export default function Home() {
@@ -136,45 +172,49 @@ export default function Home() {
 
       {/* Pricing */}
       <section id="pricing" className="py-20 px-6">
-        <div className="max-w-md mx-auto text-center">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-3">
             Simple pricing
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-10">One plan. Everything included.</p>
-          <Card className="border-2 border-violet-600 shadow-lg dark:bg-gray-900 dark:border-violet-700">
-            <CardContent className="p-8">
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <IndianRupee size={28} className="text-gray-900 dark:text-white" />
-                <span className="text-5xl font-bold text-gray-900 dark:text-white">999</span>
-              </div>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">per month</p>
-              <ul className="text-left space-y-3 mb-8">
-                {pricingFeatures.map((feat) => (
-                  <li
-                    key={feat}
-                    className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
-                  >
-                    <CheckCircle
-                      size={16}
-                      className="text-violet-600 shrink-0"
-                    />
-                    {feat}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/auth/signup">
-                <Button
-                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-                  size="lg"
-                >
-                  Get Started — ₹999/mo
-                </Button>
-              </Link>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
-                Pay via UPI, card, or netbanking
-              </p>
-            </CardContent>
-          </Card>
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-10">Pay monthly. Cancel anytime.</p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {pricingPlans.map((plan) => (
+              <Card key={plan.key} className={`relative border-2 ${plan.borderColor} ${plan.highlight ? "shadow-xl" : ""} dark:bg-gray-900`}>
+                {plan.highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    Most Popular
+                  </div>
+                )}
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{plan.label}</h3>
+                  <div className="flex items-end gap-1 mb-5">
+                    <IndianRupee size={20} className="text-gray-900 dark:text-white mb-1" />
+                    <span className="text-3xl font-bold text-gray-900 dark:text-white">{plan.price}</span>
+                    <span className="text-gray-500 dark:text-gray-400 text-sm mb-1">/month</span>
+                  </div>
+                  <ul className="space-y-2.5 mb-6">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <CheckCircle size={15} className="text-violet-600 shrink-0 mt-0.5" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href="/auth/signup">
+                    <Button
+                      className={`w-full text-white ${plan.key === "advanced" ? "bg-amber-500 hover:bg-amber-600" : plan.key === "pro" ? "bg-violet-600 hover:bg-violet-700" : "bg-blue-600 hover:bg-blue-700"}`}
+                      size="lg"
+                    >
+                      Get Started
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">
+            Pay via UPI, card, or netbanking
+          </p>
         </div>
       </section>
 

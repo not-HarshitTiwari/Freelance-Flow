@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Pencil, Package, AlertTriangle, Download, Upload, Search } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Product = {
   id: string;
@@ -37,6 +38,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async () => {
@@ -71,10 +73,15 @@ export default function ProductsPage() {
   }
 
   async function deleteProduct(id: string) {
-    if (!confirm("Delete this item?")) return;
-    await fetch("/api/products", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Deleted");
-    fetchProducts();
+    setPendingConfirm({
+      title: "Delete Item",
+      desc: "Delete this item? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/products", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        toast.success("Deleted");
+        fetchProducts();
+      }
+    });
   }
 
   function openEdit(p: Product) {
@@ -339,6 +346,9 @@ export default function ProductsPage() {
             );
           })}
         </div>
+      )}
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
     </div>
   );

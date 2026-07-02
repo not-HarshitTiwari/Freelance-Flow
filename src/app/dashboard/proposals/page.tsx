@@ -16,6 +16,7 @@ import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Proposal = {
   id: string;
@@ -86,6 +87,7 @@ export default function ProposalsPage() {
   const [statusF, setStatusF] = useState("all");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [aiUsage, setAiUsage] = useState<{ used: number; cap: number | null } | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
   const [form, setForm] = useState({
     clientName: "",
     clientEmail: "",
@@ -136,14 +138,19 @@ export default function ProposalsPage() {
   }
 
   async function deleteProposal(id: string) {
-    if (!confirm("Delete this proposal? This cannot be undone.")) return;
-    await fetch("/api/proposals", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+    setPendingConfirm({
+      title: "Delete Proposal",
+      desc: "Delete this proposal? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/proposals", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        toast.success("Proposal deleted");
+        fetchProposals();
+      }
     });
-    toast.success("Proposal deleted");
-    fetchProposals();
   }
 
   async function doGenerate() {
@@ -592,6 +599,10 @@ export default function ProposalsPage() {
         </div>
         );
       })()}
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
+      )}
 
       {/* View Proposal Dialog */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>

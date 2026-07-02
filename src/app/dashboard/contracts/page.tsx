@@ -12,6 +12,7 @@ import { Plus, FileSignature, Trash2, Send, Copy, Eye, Lock, FileDown, Bell } fr
 import { toast } from "sonner";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import Link from "next/link";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Contract = {
   id: string;
@@ -170,6 +171,7 @@ export default function ContractsPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<keyof typeof TEMPLATES | "">("");
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   const fetchContracts = useCallback(async () => {
     const res = await fetch("/api/contracts");
@@ -245,10 +247,15 @@ export default function ContractsPage() {
   }
 
   async function deleteContract(id: string) {
-    if (!confirm("Delete this contract?")) return;
-    await fetch("/api/contracts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Deleted");
-    fetchContracts();
+    setPendingConfirm({
+      title: "Delete Contract",
+      desc: "Delete this contract? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/contracts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        toast.success("Deleted");
+        fetchContracts();
+      }
+    });
   }
 
   if (!canUseContracts) return (
@@ -318,6 +325,10 @@ export default function ContractsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
 
       {/* Create Dialog */}

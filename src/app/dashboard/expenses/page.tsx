@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Expense = {
   id: string;
@@ -44,6 +45,7 @@ export default function ExpensesPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   const fetchExpenses = useCallback(async () => {
     const res = await fetch("/api/expenses");
@@ -77,10 +79,15 @@ export default function ExpensesPage() {
   }
 
   async function deleteExpense(id: string) {
-    if (!confirm("Delete this expense?")) return;
-    await fetch("/api/expenses", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Deleted");
-    fetchExpenses();
+    setPendingConfirm({
+      title: "Delete Expense",
+      desc: "Delete this expense? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/expenses", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        toast.success("Deleted");
+        fetchExpenses();
+      }
+    });
   }
 
   function openEdit(e: Expense) {
@@ -346,6 +353,9 @@ export default function ExpensesPage() {
             </div>
           ))}
         </div>
+      )}
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
     </div>
   );

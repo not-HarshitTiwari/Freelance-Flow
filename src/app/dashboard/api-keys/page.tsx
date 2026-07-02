@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type ApiKey = {
   id: string;
@@ -31,6 +32,7 @@ export default function ApiKeysPage() {
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   useEffect(() => {
     fetch("/api/api-keys")
@@ -58,19 +60,24 @@ export default function ApiKeysPage() {
   }
 
   async function revokeKey(id: string) {
-    if (!confirm("Revoke this API key? Any integrations using it will stop working.")) return;
-    const res = await fetch("/api/api-keys", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+    setPendingConfirm({
+      title: "Revoke API Key",
+      desc: "Revoke this API key? Any integrations using it will stop working.",
+      action: async () => {
+        const res = await fetch("/api/api-keys", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        if (res.ok) {
+          setKeys(ks => ks.filter(k => k.id !== id));
+          toast.success("Key revoked");
+        } else {
+          const d = await res.json();
+          toast.error(d.error);
+        }
+      }
     });
-    if (res.ok) {
-      setKeys(ks => ks.filter(k => k.id !== id));
-      toast.success("Key revoked");
-    } else {
-      const d = await res.json();
-      toast.error(d.error);
-    }
   }
 
   function toggleScope(s: string) {
@@ -175,6 +182,9 @@ export default function ApiKeysPage() {
             </div>
           )}
         </>
+      )}
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
     </div>
   );

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Receipt, Trash2, Download, CheckCircle, Send, Pencil, MessageCircle, Bell, IndianRupee, Link2, RefreshCw, FileCode, Search, Copy, Undo2, ArrowRightCircle } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
@@ -521,6 +522,7 @@ function InvoicesPageInner() {
   const [profileSignature, setProfileSignature] = useState<string | null>(null);
   const [irnTarget, setIrnTarget] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
   const planCtx = usePlan();
   const { ownerId } = useWorkspace();
   const isPro = planCtx !== "free";
@@ -682,19 +684,26 @@ function InvoicesPageInner() {
   }
 
   async function bulkDelete() {
-    if (!confirm(`Delete ${bulkSelected.size} invoice(s)? This cannot be undone.`)) return;
-    setBulkWorking(true);
-    const res = await fetch("/api/invoices/bulk", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: [...bulkSelected] }),
+    const ids = [...bulkSelected];
+    const count = bulkSelected.size;
+    setPendingConfirm({
+      title: "Delete Invoices",
+      desc: `Delete ${count} invoice(s)? This cannot be undone.`,
+      action: async () => {
+        setBulkWorking(true);
+        const res = await fetch("/api/invoices/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const data = await res.json();
+        if (!res.ok) toast.error(data.error || "Failed to delete invoices");
+        else toast.success(`${data.deleted} invoice(s) deleted${data.stock_warning ? " — " + data.stock_warning : ""}`);
+        setBulkSelected(new Set());
+        fetchInvoices();
+        setBulkWorking(false);
+      }
     });
-    const data = await res.json();
-    if (!res.ok) toast.error(data.error || "Failed to delete invoices");
-    else toast.success(`${data.deleted} invoice(s) deleted${data.stock_warning ? " — " + data.stock_warning : ""}`);
-    setBulkSelected(new Set());
-    fetchInvoices();
-    setBulkWorking(false);
   }
 
   async function sendWhatsApp(inv: Invoice, kind: "send" | "remind" = "send") {
@@ -713,11 +722,16 @@ function InvoicesPageInner() {
   }
 
   async function convertProforma(inv: Invoice) {
-    if (!confirm(`Convert "${inv.invoice_number}" from Proforma to a real Invoice? It will appear in revenue reports.`)) return;
-    const res = await fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: inv.id, invoice_type: "invoice" }) });
-    const data = await res.json();
-    if (data.error) toast.error(data.error);
-    else { toast.success("Converted to Invoice"); fetchInvoices(); }
+    setPendingConfirm({
+      title: "Convert to Invoice",
+      desc: `Convert "${inv.invoice_number}" from Proforma to a real Invoice? It will appear in revenue reports.`,
+      action: async () => {
+        const res = await fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: inv.id, invoice_type: "invoice" }) });
+        const data = await res.json();
+        if (data.error) toast.error(data.error);
+        else { toast.success("Converted to Invoice"); fetchInvoices(); }
+      }
+    });
   }
 
   async function sendReminder(inv: Invoice) {
@@ -894,13 +908,18 @@ function InvoicesPageInner() {
   }
 
   async function deleteInvoice(id: string) {
-    if (!confirm("Delete this invoice? This cannot be undone.")) return;
-    const res = await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    const data = await res.json();
-    toast.success("Invoice deleted");
-    if (data.stock_warning) toast.warning(data.stock_warning);
-    fetchInvoices();
-    fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
+    setPendingConfirm({
+      title: "Delete Invoice",
+      desc: "Delete this invoice? This cannot be undone.",
+      action: async () => {
+        const res = await fetch("/api/invoices", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        const data = await res.json();
+        toast.success("Invoice deleted");
+        if (data.stock_warning) toast.warning(data.stock_warning);
+        fetchInvoices();
+        fetch("/api/products").then(r => r.json()).then(({ products }) => setProducts(products || []));
+      }
+    });
   }
 
   async function markPaid(inv: Invoice) {
@@ -2117,6 +2136,10 @@ function InvoicesPageInner() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
+      )}
 
       {/* Send Invoice Email Dialog */}
       <Dialog open={!!sendTarget} onOpenChange={v => { if (!v) setSendTarget(null); }}>

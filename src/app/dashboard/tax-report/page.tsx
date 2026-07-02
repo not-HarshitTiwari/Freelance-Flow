@@ -32,7 +32,7 @@ const QUARTERS = [
 
 export default function TaxReportPage() {
   const plan = usePlan();
-  const isPro = plan === "pro";
+  const isPro = planAtLeast(plan, "pro");
   const canExportAccounting = planAtLeast(plan, "basic");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -90,7 +90,7 @@ export default function TaxReportPage() {
       [],
       ["TOTAL", "", "", "", totals.subtotal, totals.cgst, totals.sgst, totals.igst, totals.gst, totals.total, ""],
     ];
-    const csv = rows.map(r => r.join(",")).join("\n");
+    const csv = rows.map(r => r.map(v => csvEscape(v == null ? "" : v)).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url;

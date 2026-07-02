@@ -32,12 +32,12 @@ function ageBucket(dueDateStr: string | null): string {
 
 const BUCKET_ORDER = ["Current", "1–30 days", "31–60 days", "61–90 days", "90+ days", "No Due Date"];
 const BUCKET_COLORS: Record<string, string> = {
-  "Current": "bg-green-100 text-green-700",
-  "1–30 days": "bg-yellow-100 text-yellow-700",
-  "31–60 days": "bg-orange-100 text-orange-700",
-  "61–90 days": "bg-red-100 text-red-700",
-  "90+ days": "bg-red-200 text-red-800",
-  "No Due Date": "bg-gray-100 text-gray-600",
+  "Current": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "1–30 days": "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
+  "31–60 days": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  "61–90 days": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  "90+ days": "bg-red-200 text-red-800 dark:bg-red-900/60 dark:text-red-300",
+  "No Due Date": "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
 };
 
 function fmt(n: number) {

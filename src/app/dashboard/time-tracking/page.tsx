@@ -11,6 +11,7 @@ import { Plus, Trash2, Play, Square, Clock, FileText, Pencil, Download } from "l
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Entry = {
   id: string;
@@ -34,6 +35,7 @@ export default function TimeTrackingPage() {
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [converting, setConverting] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   // Live timer
   const [running, setRunning] = useState(false);
@@ -128,10 +130,16 @@ export default function TimeTrackingPage() {
     finally { setSaving(false); }
   }
 
-  async function deleteEntry(id: string) {
-    await fetch("/api/time-entries", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Deleted");
-    fetchEntries();
+  function deleteEntry(id: string) {
+    setPendingConfirm({
+      title: "Delete Entry",
+      desc: "Delete this time entry? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/time-entries", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        toast.success("Deleted");
+        fetchEntries();
+      },
+    });
   }
 
   async function convertToInvoice() {
@@ -295,6 +303,10 @@ export default function TimeTrackingPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
 
       <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) { setEditing(null); setForm(emptyForm); } }}>

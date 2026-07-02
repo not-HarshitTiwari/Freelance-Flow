@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { Search, TrendingUp, CalendarDays, Download, Plus, Trash2, FileDown } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type DebitNote = {
   id: string;
@@ -33,6 +34,7 @@ export default function DebitNotesPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ invoiceId: "", amount: "", reason: "" });
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   const fetchDebitNotes = useCallback(async () => {
     const res = await fetch("/api/debit-notes");
@@ -93,14 +95,19 @@ export default function DebitNotesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this debit note? The invoice total will be reduced back.")) return;
-    const res = await fetch("/api/debit-notes", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+    setPendingConfirm({
+      title: "Delete Debit Note",
+      desc: "Delete this debit note? The invoice total will be reduced back.",
+      action: async () => {
+        const res = await fetch("/api/debit-notes", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        if (res.ok) { toast.success("Debit note deleted"); fetchDebitNotes(); }
+        else { const d = await res.json(); toast.error(d.error); }
+      }
     });
-    if (res.ok) { toast.success("Debit note deleted"); fetchDebitNotes(); }
-    else { const d = await res.json(); toast.error(d.error); }
   }
 
   const filtered = debitNotes.filter(d => {
@@ -232,6 +239,10 @@ export default function DebitNotesPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
 
       {/* Create dialog */}

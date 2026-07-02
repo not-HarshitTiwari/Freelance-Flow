@@ -91,7 +91,7 @@ export default function Sidebar({ user, plan }: { user: User; plan: string }) {
         FreelanceFlow
       </div>
 
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => (
           <Link key={item.href} href={item.href}>
             <div

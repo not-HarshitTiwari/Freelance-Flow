@@ -17,16 +17,16 @@ type LogEntry = {
 };
 
 const ACTION_COLORS: Record<string, string> = {
-  "invoice.create": "bg-green-100 text-green-700",
-  "invoice.update": "bg-blue-100 text-blue-700",
-  "invoice.delete": "bg-red-100 text-red-700",
-  "quote.create": "bg-green-100 text-green-700",
-  "quote.update": "bg-blue-100 text-blue-700",
-  "quote.delete": "bg-red-100 text-red-700",
-  "expense.create": "bg-green-100 text-green-700",
-  "expense.delete": "bg-red-100 text-red-700",
-  "client.create": "bg-green-100 text-green-700",
-  "client.delete": "bg-red-100 text-red-700",
+  "invoice.create": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "invoice.update": "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  "invoice.delete": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  "quote.create": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "quote.update": "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  "quote.delete": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  "expense.create": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "expense.delete": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  "client.create": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "client.delete": "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
 };
 
 const PAGE_SIZE = 50;
@@ -132,7 +132,7 @@ export default function AuditLogPage() {
                     {new Date(entry.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge className={`text-xs font-mono ${ACTION_COLORS[entry.action] || "bg-gray-100 text-gray-600"}`}>
+                    <Badge className={`text-xs font-mono ${ACTION_COLORS[entry.action] || "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}`}>
                       {entry.action}
                     </Badge>
                   </td>

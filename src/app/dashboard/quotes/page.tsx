@@ -13,6 +13,7 @@ import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search,
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 import { downloadQuotePdf } from "@/lib/quote-pdf";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type QuoteItem = { description: string; quantity: number; rate: number; product_id?: string; discount_pct?: number };
 
@@ -205,6 +206,7 @@ export default function QuotesPage() {
   const [statusF, setStatusF] = useState("all");
   const [converting, setConverting] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; desc: string; action: () => void } | null>(null);
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [items, setItems] = useState<QuoteItem[]>([{ ...emptyItem }]);
@@ -387,10 +389,15 @@ export default function QuotesPage() {
   }
 
   async function deleteQuote(id: string) {
-    if (!confirm("Delete this quote? This cannot be undone.")) return;
-    await fetch("/api/quotes", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    toast.success("Quote deleted");
-    fetchQuotes();
+    setPendingConfirm({
+      title: "Delete Quote",
+      desc: "Delete this quote? This cannot be undone.",
+      action: async () => {
+        await fetch("/api/quotes", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+        toast.success("Quote deleted");
+        fetchQuotes();
+      }
+    });
   }
 
   async function copyReviewLink(id: string) {
@@ -647,6 +654,10 @@ export default function QuotesPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog open title={pendingConfirm.title} description={pendingConfirm.desc} onConfirm={() => { pendingConfirm.action(); setPendingConfirm(null); }} onCancel={() => setPendingConfirm(null)} />
       )}
 
       {/* Edit Quote Dialog */}
