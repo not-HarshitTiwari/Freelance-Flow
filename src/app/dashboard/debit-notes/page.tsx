@@ -7,26 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Undo2, CalendarDays, Download, Plus } from "lucide-react";
+import { Search, TrendingUp, CalendarDays, Download, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-type CreditNote = {
+type DebitNote = {
   id: string;
-  credit_note_number: string;
+  debit_note_number: string;
   amount: number;
   reason: string | null;
   created_at: string;
-  invoices: { invoice_number: string; customer_name: string | null; customer_email: string | null; total: number } | null;
+  invoices: { invoice_number: string; customer_name: string | null; total: number } | null;
 };
 
-type InvoiceOption = { id: string; invoice_number: string; customer_name: string | null; total: number; amount_paid: number | null; status: string };
+type InvoiceOption = { id: string; invoice_number: string; customer_name: string | null; total: number };
 
 function fmt(n: number) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
 }
 
-export default function CreditNotesPage() {
-  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
+export default function DebitNotesPage() {
+  const [debitNotes, setDebitNotes] = useState<DebitNote[]>([]);
   const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState("");
@@ -34,21 +34,21 @@ export default function CreditNotesPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ invoiceId: "", amount: "", reason: "" });
 
-  const fetchCreditNotes = useCallback(async () => {
-    const res = await fetch("/api/credit-notes");
+  const fetchDebitNotes = useCallback(async () => {
+    const res = await fetch("/api/debit-notes");
     const data = await res.json();
     if (data.error) toast.error(data.error);
-    setCreditNotes(data.creditNotes || []);
+    setDebitNotes(data.debitNotes || []);
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchCreditNotes(); }, [fetchCreditNotes]);
+  useEffect(() => { fetchDebitNotes(); }, [fetchDebitNotes]);
 
   async function openCreate() {
     if (!invoices.length) {
       const res = await fetch("/api/invoices");
       const data = await res.json();
-      setInvoices((data.invoices || []).filter((i: InvoiceOption) => ["unpaid", "partial", "overdue"].includes(i.status)));
+      setInvoices(data.invoices || []);
     }
     setForm({ invoiceId: "", amount: "", reason: "" });
     setOpen(true);
@@ -57,7 +57,7 @@ export default function CreditNotesPage() {
   async function handleCreate() {
     if (!form.invoiceId || !form.amount) { toast.error("Select invoice and enter amount"); return; }
     setSaving(true);
-    const res = await fetch("/api/credit-notes", {
+    const res = await fetch("/api/debit-notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ invoiceId: form.invoiceId, amount: parseFloat(form.amount), reason: form.reason }),
@@ -65,43 +65,51 @@ export default function CreditNotesPage() {
     const data = await res.json();
     setSaving(false);
     if (!res.ok) { toast.error(data.error); return; }
-    toast.success("Credit note created");
+    toast.success("Debit note issued");
     setOpen(false);
-    fetchCreditNotes();
+    fetchDebitNotes();
   }
 
-  const selectedInvoice = invoices.find(i => i.id === form.invoiceId);
-  const maxAmount = selectedInvoice ? selectedInvoice.total - (selectedInvoice.amount_paid ?? 0) : 0;
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this debit note? The invoice total will be reduced back.")) return;
+    const res = await fetch("/api/debit-notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) { toast.success("Debit note deleted"); fetchDebitNotes(); }
+    else { const d = await res.json(); toast.error(d.error); }
+  }
 
-  const filtered = creditNotes.filter(c => {
+  const filtered = debitNotes.filter(d => {
     const q = searchQ.toLowerCase();
     if (!q) return true;
     return (
-      c.credit_note_number.toLowerCase().includes(q) ||
-      (c.invoices?.invoice_number || "").toLowerCase().includes(q) ||
-      (c.invoices?.customer_name || "").toLowerCase().includes(q) ||
-      (c.reason || "").toLowerCase().includes(q)
+      d.debit_note_number.toLowerCase().includes(q) ||
+      (d.invoices?.invoice_number || "").toLowerCase().includes(q) ||
+      (d.invoices?.customer_name || "").toLowerCase().includes(q) ||
+      (d.reason || "").toLowerCase().includes(q)
     );
   });
 
-  const totalCredited = creditNotes.reduce((s, c) => s + c.amount, 0);
+  const totalDebited = debitNotes.reduce((s, d) => s + d.amount, 0);
 
   function exportCSV() {
-    const rows = [["Credit Note #", "Date", "Invoice #", "Customer", "Amount (₹)", "Reason"]];
-    for (const c of creditNotes) {
+    const rows = [["Debit Note #", "Date", "Invoice #", "Customer", "Amount (₹)", "Reason"]];
+    for (const d of debitNotes) {
       rows.push([
-        c.credit_note_number,
-        new Date(c.created_at).toLocaleDateString("en-IN"),
-        c.invoices?.invoice_number || "",
-        c.invoices?.customer_name || "",
-        String(c.amount),
-        c.reason || "",
+        d.debit_note_number,
+        new Date(d.created_at).toLocaleDateString("en-IN"),
+        d.invoices?.invoice_number || "",
+        d.invoices?.customer_name || "",
+        String(d.amount),
+        d.reason || "",
       ]);
     }
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "credit-notes.csv"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = "debit-notes.csv"; a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -109,17 +117,17 @@ export default function CreditNotesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Credit Notes</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Reduce an outstanding invoice balance</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Debit Notes</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Charge a client more on an existing invoice</p>
         </div>
         <div className="flex gap-2">
-          {creditNotes.length > 0 && (
+          {debitNotes.length > 0 && (
             <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-violet-600 dark:hover:text-violet-400">
               <Download size={15} /> Export CSV
             </button>
           )}
           <Button onClick={openCreate} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
-            <Plus size={15} /> New Credit Note
+            <Plus size={15} /> New Debit Note
           </Button>
         </div>
       </div>
@@ -128,12 +136,12 @@ export default function CreditNotesPage() {
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                <Undo2 size={18} className="text-orange-600 dark:text-orange-400" />
+              <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+                <TrendingUp size={18} className="text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Total Credited</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(totalCredited)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total Debited</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(totalDebited)}</p>
               </div>
             </div>
           </CardContent>
@@ -145,15 +153,15 @@ export default function CreditNotesPage() {
                 <CalendarDays size={18} className="text-violet-600 dark:text-violet-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Credit Notes Issued</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{creditNotes.length}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Debit Notes Issued</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{debitNotes.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {creditNotes.length > 0 && (
+      {debitNotes.length > 0 && (
         <div className="relative mb-4 max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search…" value={searchQ} onChange={e => setSearchQ(e.target.value)} className="pl-9 h-9 text-sm" />
@@ -162,13 +170,13 @@ export default function CreditNotesPage() {
 
       {loading ? (
         <p className="text-sm text-gray-400 text-center py-16">Loading…</p>
-      ) : creditNotes.length === 0 ? (
+      ) : debitNotes.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
-          <Undo2 size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-medium dark:text-gray-400">No credit notes yet</p>
-          <p className="text-sm mb-4">Click &quot;New Credit Note&quot; to issue one against an invoice.</p>
+          <TrendingUp size={48} className="mx-auto mb-4 opacity-30" />
+          <p className="text-lg font-medium dark:text-gray-400">No debit notes yet</p>
+          <p className="text-sm mb-4">Issue one when you need to charge a client more on an invoice.</p>
           <Button onClick={openCreate} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
-            <Plus size={15} /> New Credit Note
+            <Plus size={15} /> New Debit Note
           </Button>
         </div>
       ) : filtered.length === 0 ? (
@@ -179,21 +187,26 @@ export default function CreditNotesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(c => (
-            <Card key={c.id} className="hover:shadow-md transition-shadow">
+          {filtered.map(d => (
+            <Card key={d.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4 flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900 dark:text-white truncate">
-                    {c.credit_note_number}
-                    {c.invoices?.invoice_number && ` — against ${c.invoices.invoice_number}`}
-                    {c.invoices?.customer_name && ` (${c.invoices.customer_name})`}
+                    {d.debit_note_number}
+                    {d.invoices?.invoice_number && ` — against ${d.invoices.invoice_number}`}
+                    {d.invoices?.customer_name && ` (${d.invoices.customer_name})`}
                   </p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
-                    {new Date(c.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
-                    {c.reason && ` • ${c.reason}`}
+                    {new Date(d.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    {d.reason && ` • ${d.reason}`}
                   </p>
                 </div>
-                <p className="text-lg font-semibold text-orange-600 dark:text-orange-400 shrink-0">-{fmt(c.amount)}</p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">+{fmt(d.amount)}</p>
+                  <button onClick={() => handleDelete(d.id)} className="text-red-400 hover:text-red-600 p-1">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -204,44 +217,43 @@ export default function CreditNotesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md dark:bg-gray-900">
           <DialogHeader>
-            <DialogTitle className="dark:text-white">New Credit Note</DialogTitle>
+            <DialogTitle className="dark:text-white">New Debit Note</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1">
               <Label>Invoice</Label>
               <select
                 value={form.invoiceId}
-                onChange={e => setForm(f => ({ ...f, invoiceId: e.target.value, amount: "" }))}
+                onChange={e => setForm(f => ({ ...f, invoiceId: e.target.value }))}
                 className="h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-800 dark:text-gray-100 px-2.5 text-sm outline-none"
               >
                 <option value="">Select an invoice…</option>
                 {invoices.map(i => (
                   <option key={i.id} value={i.id}>
-                    {i.invoice_number} — {i.customer_name || "Unknown"} (balance: {fmt(i.total - (i.amount_paid ?? 0))})
+                    {i.invoice_number} — {i.customer_name || "Unknown"} ({fmt(i.total)})
                   </option>
                 ))}
               </select>
-              {!invoices.length && <p className="text-xs text-gray-400">No unpaid invoices found.</p>}
             </div>
 
             <div className="space-y-1">
-              <Label>Amount {selectedInvoice && <span className="text-gray-400 font-normal">(max {fmt(maxAmount)})</span>}</Label>
+              <Label>Extra Amount</Label>
               <Input
                 type="number"
                 min={0.01}
-                max={maxAmount || undefined}
                 step="0.01"
                 placeholder="0.00"
                 value={form.amount}
                 onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
               />
+              <p className="text-xs text-gray-400">This amount will be added to the invoice total.</p>
             </div>
 
             <div className="space-y-1">
               <Label>Reason <span className="text-gray-400 font-normal">(optional)</span></Label>
               <Textarea
                 rows={2}
-                placeholder="e.g. Overbilled, returned goods, discount adjustment"
+                placeholder="e.g. Extra work, underbilled, price revision"
                 value={form.reason}
                 onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
               />
@@ -249,7 +261,7 @@ export default function CreditNotesPage() {
 
             <div className="flex gap-2 pt-1">
               <Button onClick={handleCreate} disabled={saving || !form.invoiceId || !form.amount} className="bg-violet-600 hover:bg-violet-700 text-white">
-                {saving ? "Issuing…" : "Issue Credit Note"}
+                {saving ? "Issuing…" : "Issue Debit Note"}
               </Button>
               <Button variant="outline" className="dark:border-gray-600 dark:text-gray-300" onClick={() => setOpen(false)}>Cancel</Button>
             </div>

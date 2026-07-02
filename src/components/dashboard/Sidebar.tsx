@@ -45,6 +45,7 @@ const navItems = [
   { href: "/dashboard/invoices", label: "Invoices", icon: Receipt },
   { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
   { href: "/dashboard/credit-notes", label: "Credit Notes", icon: Undo2 },
+  { href: "/dashboard/debit-notes", label: "Debit Notes", icon: TrendingUp },
   { href: "/dashboard/clients", label: "Clients", icon: Users },
   { href: "/dashboard/clients/ledger", label: "Client Ledger", icon: BookOpen },
   { href: "/dashboard/products", label: "Products & Services", icon: Package },
