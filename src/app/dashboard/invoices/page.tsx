@@ -483,6 +483,8 @@ function InvoicesPageInner() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"created_at" | "total" | "due_date" | "invoice_number">("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -544,6 +546,18 @@ function InvoicesPageInner() {
     setPdfTemplate(savedTemplate);
     setPdfColor(savedColor);
     setCurrency(savedCurrency);
+    const savedDueDays = parseInt(localStorage.getItem("inv_default_due_days") || "0");
+    const savedDefNotes = localStorage.getItem("inv_default_notes") || "";
+    const savedDefTerms = localStorage.getItem("inv_default_terms") || "";
+    if (savedDueDays > 0 || savedDefNotes || savedDefTerms) {
+      const dueDate = savedDueDays > 0 ? new Date(Date.now() + savedDueDays * 86400000).toISOString().slice(0, 10) : "";
+      setForm(f => ({
+        ...f,
+        ...(dueDate ? { due_date: dueDate } : {}),
+        ...(savedDefNotes ? { notes: savedDefNotes } : {}),
+        ...(savedDefTerms ? { terms: savedDefTerms } : {}),
+      }));
+    }
     fetch("/api/profile").then(r => r.json()).then(({ profile }) => {
       if (profile) {
         setProfileLogo(profile.logo_url || null);
@@ -1049,8 +1063,15 @@ function InvoicesPageInner() {
     const matchClient = !clientFilter || (inv.customer_name || "") === clientFilter;
     return matchQuery && matchStatus && matchDateFrom && matchDateTo && matchClient;
   });
-  const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE);
-  const pagedInvoices = filteredInvoices.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    if (sortBy === "total") return (a.total - b.total) * dir;
+    const av = (a[sortBy] ?? "") as string;
+    const bv = (b[sortBy] ?? "") as string;
+    return av < bv ? -dir : av > bv ? dir : 0;
+  });
+  const totalPages = Math.ceil(sortedInvoices.length / PAGE_SIZE);
+  const pagedInvoices = sortedInvoices.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div>
@@ -1373,6 +1394,15 @@ function InvoicesPageInner() {
                 {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
+            <select value={sortBy} onChange={e => { setSortBy(e.target.value as typeof sortBy); setPage(0); }} className="h-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 px-2 text-xs outline-none">
+              <option value="created_at">Sort: Newest</option>
+              <option value="invoice_number">Invoice #</option>
+              <option value="due_date">Due Date</option>
+              <option value="total">Amount</option>
+            </select>
+            <button onClick={() => { setSortDir(d => d === "asc" ? "desc" : "asc"); setPage(0); }} className="h-8 w-8 rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 text-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800">
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
             {(dateFrom || dateTo || clientFilter) && (
               <button onClick={() => { setDateFrom(""); setDateTo(""); setClientFilter(""); setPage(0); }} className="text-xs text-violet-500 underline px-1">Clear</button>
             )}

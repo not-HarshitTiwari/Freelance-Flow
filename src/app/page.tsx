@@ -51,16 +51,16 @@ const pricingFeatures = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-gray-950">
       {/* Navbar */}
-      <nav className="border-b px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
-        <div className="flex items-center gap-2 font-bold text-xl">
+      <nav className="border-b dark:border-gray-800 px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+        <div className="flex items-center gap-2 font-bold text-xl text-gray-900 dark:text-white">
           <Zap className="text-violet-600" size={22} />
           FreelanceFlow
         </div>
         <div className="flex items-center gap-3">
           <Link href="/auth/login">
-            <Button variant="ghost">Login</Button>
+            <Button variant="outline">Login</Button>
           </Link>
           <Link href="/auth/signup">
             <Button className="bg-violet-600 hover:bg-violet-700">
@@ -72,16 +72,16 @@ export default function Home() {
 
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-6 py-24 text-center">
-        <Badge className="mb-4 bg-violet-100 text-violet-700 hover:bg-violet-100">
+        <Badge className="mb-4 bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/40 dark:text-violet-300">
           Built for Indian Freelancers
         </Badge>
-        <h1 className="text-5xl font-bold tracking-tight text-gray-900 mb-6">
+        <h1 className="text-5xl font-bold tracking-tight text-gray-900 dark:text-white mb-6">
           Stop wasting time on{" "}
           <span className="text-violet-600">admin work.</span>
           <br />
           Start earning more.
         </h1>
-        <p className="text-xl text-gray-500 mb-10 max-w-2xl mx-auto">
+        <p className="text-xl text-gray-500 dark:text-gray-400 mb-10 max-w-2xl mx-auto">
           FreelanceFlow handles your proposals, invoices, and payment reminders
           — so you can focus on doing the work you love.
         </p>
@@ -100,32 +100,32 @@ export default function Home() {
             </Button>
           </Link>
         </div>
-        <p className="text-sm text-gray-400 mt-4">
+        <p className="text-sm text-gray-400 dark:text-gray-500 mt-4">
           No credit card required • Free forever plan available
         </p>
       </section>
 
       {/* Features */}
-      <section className="bg-gray-50 py-20 px-6">
+      <section className="bg-gray-50 dark:bg-gray-900 py-20 px-6">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-3">
+          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-3">
             Everything a freelancer needs
           </h2>
-          <p className="text-center text-gray-500 mb-12">
+          <p className="text-center text-gray-500 dark:text-gray-400 mb-12">
             One tool. All your admin. Done.
           </p>
           <div className="grid md:grid-cols-2 gap-6">
             {features.map((f) => (
-              <Card key={f.title} className="border-0 shadow-sm">
+              <Card key={f.title} className="border-0 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                 <CardContent className="p-6 flex gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
-                    <f.icon className="text-violet-600" size={20} />
+                  <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
+                    <f.icon className="text-violet-600 dark:text-violet-400" size={20} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-1">
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
                       {f.title}
                     </h3>
-                    <p className="text-gray-500 text-sm">{f.description}</p>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">{f.description}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -137,22 +137,22 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 px-6">
         <div className="max-w-md mx-auto text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
             Simple pricing
           </h2>
-          <p className="text-gray-500 mb-10">One plan. Everything included.</p>
-          <Card className="border-2 border-violet-600 shadow-lg">
+          <p className="text-gray-500 dark:text-gray-400 mb-10">One plan. Everything included.</p>
+          <Card className="border-2 border-violet-600 shadow-lg dark:bg-gray-900 dark:border-violet-700">
             <CardContent className="p-8">
               <div className="flex items-center justify-center gap-1 mb-1">
-                <IndianRupee size={28} className="text-gray-900" />
-                <span className="text-5xl font-bold text-gray-900">999</span>
+                <IndianRupee size={28} className="text-gray-900 dark:text-white" />
+                <span className="text-5xl font-bold text-gray-900 dark:text-white">999</span>
               </div>
-              <p className="text-gray-500 mb-6">per month</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">per month</p>
               <ul className="text-left space-y-3 mb-8">
                 {pricingFeatures.map((feat) => (
                   <li
                     key={feat}
-                    className="flex items-center gap-2 text-sm text-gray-700"
+                    className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
                   >
                     <CheckCircle
                       size={16}
@@ -164,13 +164,13 @@ export default function Home() {
               </ul>
               <Link href="/auth/signup">
                 <Button
-                  className="w-full bg-violet-600 hover:bg-violet-700"
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
                   size="lg"
                 >
                   Get Started — ₹999/mo
                 </Button>
               </Link>
-              <p className="text-xs text-gray-400 mt-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
                 Pay via UPI, card, or netbanking
               </p>
             </CardContent>
@@ -179,8 +179,8 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-8 text-center text-sm text-gray-400">
-        <div className="flex items-center justify-center gap-2 font-semibold text-gray-700 mb-2">
+      <footer className="border-t dark:border-gray-800 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div className="flex items-center justify-center gap-2 font-semibold text-gray-700 dark:text-gray-300 mb-2">
           <Zap className="text-violet-600" size={16} />
           FreelanceFlow
         </div>

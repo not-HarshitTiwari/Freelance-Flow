@@ -27,32 +27,32 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
   }, 0) ?? 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center gap-3">
+      <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-6 py-4 flex items-center gap-3">
         <Image src="/logo.png" alt="FreelanceFlow" width={28} height={28} className="rounded-sm" />
-        <span className="font-bold text-gray-900">FreelanceFlow</span>
-        <span className="text-gray-300 ml-1">|</span>
-        <span className="text-gray-500 text-sm">Client Portal</span>
+        <span className="font-bold text-gray-900 dark:text-white">FreelanceFlow</span>
+        <span className="text-gray-300 dark:text-gray-700 ml-1">|</span>
+        <span className="text-gray-500 dark:text-gray-400 text-sm">Client Portal</span>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-10">
         {/* Client info */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Hello, {client?.name} 👋</h1>
-          {client?.company && <p className="text-gray-500 mt-1">{client.company}</p>}
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hello, {client?.name} 👋</h1>
+          {client?.company && <p className="text-gray-500 dark:text-gray-400 mt-1">{client.company}</p>}
           {totalDue > 0 && (
-            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-5 py-3 inline-flex items-center gap-2">
-              <span className="text-orange-700 font-semibold text-sm">Amount Due:</span>
-              <span className="text-orange-700 font-bold text-lg">₹{totalDue.toLocaleString("en-IN")}</span>
+            <div className="mt-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl px-5 py-3 inline-flex items-center gap-2">
+              <span className="text-orange-700 dark:text-orange-300 font-semibold text-sm">Amount Due:</span>
+              <span className="text-orange-700 dark:text-orange-300 font-bold text-lg">₹{totalDue.toLocaleString("en-IN")}</span>
             </div>
           )}
         </div>
 
-        <h2 className="font-semibold text-gray-700 mb-3">Your Invoices</h2>
+        <h2 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Your Invoices</h2>
 
         {!invoices?.length ? (
-          <p className="text-gray-400 text-sm">No invoices yet.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm">No invoices yet.</p>
         ) : (
           <div className="space-y-3">
             {invoices.map((inv: {
@@ -62,18 +62,18 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
               bank_ifsc: string | null; bank_name: string | null; payment_link: string | null;
               amount_paid: number | null; notes: string | null;
             }) => (
-              <Card key={inv.invoice_number}>
+              <Card key={inv.invoice_number} className="dark:bg-gray-900 dark:border-gray-800">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-gray-900">{inv.invoice_number}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="font-semibold text-gray-900 dark:text-white">{inv.invoice_number}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                         Issued {new Date(inv.invoice_date).toLocaleDateString("en-IN")}
                         {inv.due_date && ` • Due ${new Date(inv.due_date).toLocaleDateString("en-IN")}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-900">₹{inv.total.toLocaleString("en-IN")}</span>
+                      <span className="font-bold text-gray-900 dark:text-white">₹{inv.total.toLocaleString("en-IN")}</span>
                       <Badge className={statusColors[inv.status] || "bg-gray-100 text-gray-600"}>{inv.status}</Badge>
                     </div>
                   </div>
@@ -101,14 +101,14 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                         const methods = inv.payment_methods?.length ? inv.payment_methods : inv.payment_method ? [inv.payment_method] : [];
                         if (!methods.length && !inv.upi_id && !inv.bank_account_number) return null;
                         return (
-                          <div className="bg-violet-50 rounded-lg p-3 text-sm space-y-1">
-                            {methods.length > 0 && <p className="font-medium text-violet-700">Pay via {methods.join(", ")}</p>}
-                            {inv.upi_id && <p className="text-violet-600">UPI ID: <strong>{inv.upi_id}</strong></p>}
+                          <div className="bg-violet-50 dark:bg-violet-900/20 rounded-lg p-3 text-sm space-y-1">
+                            {methods.length > 0 && <p className="font-medium text-violet-700 dark:text-violet-300">Pay via {methods.join(", ")}</p>}
+                            {inv.upi_id && <p className="text-violet-600 dark:text-violet-400">UPI ID: <strong>{inv.upi_id}</strong></p>}
                             {inv.bank_account_number && (
                               <>
-                                <p className="text-violet-600">Account: <strong>{inv.bank_account_name}</strong></p>
-                                <p className="text-violet-600">Acc No: <strong>{inv.bank_account_number}</strong></p>
-                                <p className="text-violet-600">IFSC: <strong>{inv.bank_ifsc}</strong> · Bank: <strong>{inv.bank_name}</strong></p>
+                                <p className="text-violet-600 dark:text-violet-400">Account: <strong>{inv.bank_account_name}</strong></p>
+                                <p className="text-violet-600 dark:text-violet-400">Acc No: <strong>{inv.bank_account_number}</strong></p>
+                                <p className="text-violet-600 dark:text-violet-400">IFSC: <strong>{inv.bank_ifsc}</strong> · Bank: <strong>{inv.bank_name}</strong></p>
                               </>
                             )}
                           </div>
@@ -122,7 +122,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                     </div>
                   )}
 
-                  {inv.notes && <p className="text-xs text-gray-400 mt-2">{inv.notes}</p>}
+                  {inv.notes && <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{inv.notes}</p>}
                 </CardContent>
               </Card>
             ))}
@@ -132,19 +132,19 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
         {/* Paid invoices — collapsed section */}
         {paidInvoices?.length > 0 && (
           <details className="mt-6">
-            <summary className="cursor-pointer text-sm font-medium text-gray-500 hover:text-gray-700 select-none">
+            <summary className="cursor-pointer text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 select-none">
               {paidInvoices.length} paid invoice{paidInvoices.length !== 1 ? "s" : ""} ▸
             </summary>
             <div className="space-y-3 mt-3 opacity-70">
               {paidInvoices.map((inv: { id: string; invoice_number: string; invoice_date: string; total: number }) => (
-                <Card key={inv.id}>
+                <Card key={inv.id} className="dark:bg-gray-900 dark:border-gray-800">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-700">{inv.invoice_number}</p>
-                      <p className="text-xs text-gray-400">{new Date(inv.invoice_date).toLocaleDateString("en-IN")}</p>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">{inv.invoice_number}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(inv.invoice_date).toLocaleDateString("en-IN")}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-600 font-medium">₹{inv.total.toLocaleString("en-IN")}</span>
+                      <span className="text-gray-600 dark:text-gray-300 font-medium">₹{inv.total.toLocaleString("en-IN")}</span>
                       <Badge className="bg-green-100 text-green-700">paid</Badge>
                     </div>
                   </CardContent>
@@ -157,14 +157,14 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
         {/* Proposals */}
         {proposals?.length > 0 && (
           <div className="mt-10">
-            <h2 className="font-semibold text-gray-700 mb-3">Your Proposals</h2>
+            <h2 className="font-semibold text-gray-700 dark:text-gray-300 mb-3">Your Proposals</h2>
             <div className="space-y-3">
               {proposals.map((p: { id: string; title: string; status: string; created_at: string; project_type?: string }) => (
-                <Card key={p.id}>
+                <Card key={p.id} className="dark:bg-gray-900 dark:border-gray-800">
                   <CardContent className="p-4 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">{p.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="font-medium text-gray-900 dark:text-white">{p.title}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                         {p.project_type && `${p.project_type} · `}
                         {new Date(p.created_at).toLocaleDateString("en-IN")}
                       </p>
@@ -181,7 +181,7 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
           </div>
         )}
 
-        {!whiteLabel && <p className="text-center text-xs text-gray-300 mt-12">Powered by FreelanceFlow</p>}
+        {!whiteLabel && <p className="text-center text-xs text-gray-300 dark:text-gray-700 mt-12">Powered by FreelanceFlow</p>}
       </div>
     </div>
   );

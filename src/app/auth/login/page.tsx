@@ -72,21 +72,23 @@ export default function LoginPage() {
 
   if (factorId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
         <div className="w-full max-w-md">
-          <div className="flex items-center justify-center gap-2 mb-8 font-bold text-xl">
+          <div className="flex items-center justify-center gap-2 mb-8 font-bold text-xl text-gray-900 dark:text-white">
             <Zap className="text-violet-600" size={22} />
             FreelanceFlow
           </div>
-          <Card>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader className="text-center">
-              <CardTitle className="flex items-center justify-center gap-2"><ShieldCheck size={20} className="text-violet-600" /> Two-Factor Verification</CardTitle>
-              <CardDescription>Enter the 6-digit code from your authenticator app</CardDescription>
+              <CardTitle className="flex items-center justify-center gap-2 dark:text-white">
+                <ShieldCheck size={20} className="text-violet-600" /> Two-Factor Verification
+              </CardTitle>
+              <CardDescription className="dark:text-gray-400">Enter the 6-digit code from your authenticator app</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="otp">Authentication Code</Label>
+                  <Label htmlFor="otp" className="dark:text-gray-300">Authentication Code</Label>
                   <Input
                     id="otp"
                     inputMode="numeric"
@@ -96,9 +98,10 @@ export default function LoginPage() {
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
                     maxLength={6}
                     required
+                    className="dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:placeholder-gray-500"
                   />
                 </div>
-                <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700" disabled={verifying || otpCode.length !== 6}>
+                <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={verifying || otpCode.length !== 6}>
                   {verifying ? "Verifying..." : "Verify & Sign In"}
                 </Button>
               </form>
@@ -110,21 +113,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8 font-bold text-xl">
+        <div className="flex items-center justify-center gap-2 mb-8 font-bold text-xl text-gray-900 dark:text-white">
           <Zap className="text-violet-600" size={22} />
           FreelanceFlow
         </div>
-        <Card>
+        <Card className="dark:bg-gray-900 dark:border-gray-800">
           <CardHeader className="text-center">
-            <CardTitle>Welcome back</CardTitle>
-            <CardDescription>Sign in to your account</CardDescription>
+            <CardTitle className="dark:text-white">Welcome back</CardTitle>
+            <CardDescription className="dark:text-gray-400">Sign in to your account</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="dark:text-gray-300">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -132,10 +135,16 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:placeholder-gray-500"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="dark:text-gray-300">Password</Label>
+                  <Link href="/auth/forgot-password" className="text-xs text-violet-600 hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -143,17 +152,14 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:placeholder-gray-500"
                 />
               </div>
-              <Button
-                type="submit"
-                className="w-full bg-violet-600 hover:bg-violet-700"
-                disabled={loading}
-              >
+              <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={loading}>
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
-            <p className="text-center text-sm text-gray-500 mt-4">
+            <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
               Don&apos;t have an account?{" "}
               <Link href="/auth/signup" className="text-violet-600 hover:underline font-medium">
                 Sign up free

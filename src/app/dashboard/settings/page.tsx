@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Eye, EyeOff, Upload, X, Pen, Trash2, Lock, UserPlus, UserX } from "lucide-react";
@@ -71,6 +72,9 @@ export default function SettingsPage() {
   const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
   const [pdfColor, setPdfColor] = useState<string>("#7c3aed");
   const [currency, setCurrency] = useState("INR");
+  const [defaultDueDays, setDefaultDueDays] = useState(0);
+  const [defaultNotes, setDefaultNotes] = useState("");
+  const [defaultTerms, setDefaultTerms] = useState("");
   const [reminderCadence, setReminderCadence] = useState(3);
   const [savingCadence, setSavingCadence] = useState(false);
 
@@ -117,6 +121,9 @@ export default function SettingsPage() {
     setPdfTemplate((localStorage.getItem("inv_template") as PdfTemplate) || "classic");
     setPdfColor(localStorage.getItem("inv_color") || "#7c3aed");
     setCurrency(localStorage.getItem("inv_currency") || "INR");
+    setDefaultDueDays(parseInt(localStorage.getItem("inv_default_due_days") || "0"));
+    setDefaultNotes(localStorage.getItem("inv_default_notes") || "");
+    setDefaultTerms(localStorage.getItem("inv_default_terms") || "");
     fetch("/api/profile").then(r => r.json()).then(({ profile, role }) => {
       if (role) setWorkspaceRole(role);
       if (profile) {
@@ -529,6 +536,31 @@ export default function SettingsPage() {
                   style={{ background: "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 6px)" }} />
               </div>
               <p className="text-xs text-gray-400 dark:text-gray-500">Used as the header/highlight color in the PDF.</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* New Invoice Defaults */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base dark:text-white">New Invoice Defaults</CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Pre-filled values when creating a new invoice.</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Default Due Days</Label>
+              <div className="flex items-center gap-3">
+                <Input type="number" min={0} max={365} value={defaultDueDays} onChange={e => { const v = Math.max(0, parseInt(e.target.value) || 0); setDefaultDueDays(v); localStorage.setItem("inv_default_due_days", String(v)); }} className="w-28 h-9" />
+                <span className="text-sm text-gray-400">days after invoice date (0 = no default)</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Default Notes</Label>
+              <Textarea value={defaultNotes} onChange={e => { setDefaultNotes(e.target.value); localStorage.setItem("inv_default_notes", e.target.value); }} rows={2} placeholder="Thank you for your business!" />
+            </div>
+            <div className="space-y-2">
+              <Label>Default Terms</Label>
+              <Textarea value={defaultTerms} onChange={e => { setDefaultTerms(e.target.value); localStorage.setItem("inv_default_terms", e.target.value); }} rows={2} placeholder="Payment due within 15 days of invoice date." />
             </div>
           </CardContent>
         </Card>

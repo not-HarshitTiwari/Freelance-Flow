@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2, Search, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, FileText, Copy, Lock, Trash2, Pencil, Send, Check, Link2, Search, ThumbsUp, ThumbsDown, FileDown } from "lucide-react";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { RewardedAdModal } from "@/components/ads/RewardedAdModal";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
@@ -39,6 +39,27 @@ const statusColors: Record<string, string> = {
   accepted: "bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300",
   rejected: "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300",
 };
+
+function downloadProposalPdf(p: Proposal) {
+  import("jspdf").then(({ default: jsPDF }) => {
+    const doc = new jsPDF();
+    doc.setFillColor(124, 58, 237);
+    doc.rect(0, 0, 210, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text(p.title, 14, 14);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(new Date(p.created_at).toLocaleDateString("en-IN"), 170, 10);
+    if (p.amount) doc.text(`₹${p.amount.toLocaleString("en-IN")}`, 170, 16);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    const lines = doc.splitTextToSize(p.content, 182);
+    doc.text(lines, 14, 32);
+    doc.save(`Proposal_${p.title.replace(/\s+/g, "_")}.pdf`);
+  });
+}
 
 export default function ProposalsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -507,6 +528,9 @@ export default function ProposalsPage() {
                   </div>
                   <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                     <Badge className={statusColors[p.status] || ""}>{p.status}</Badge>
+                    <button onClick={() => downloadProposalPdf(p)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Download PDF">
+                      <FileDown size={15} />
+                    </button>
                     <button
                       onClick={() => { setEditing(p); setEditContent(p.content); }}
                       className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400"
@@ -579,6 +603,9 @@ export default function ProposalsPage() {
             {selected?.content}
           </div>
           <div className="flex gap-2 mt-4">
+            <Button variant="outline" className="gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700" onClick={() => selected && downloadProposalPdf(selected)}>
+              <FileDown size={14} /> Download PDF
+            </Button>
             <Button
               variant="outline"
               className="gap-2 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"

@@ -192,6 +192,11 @@ export default function TimeTrackingPage() {
               {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           )}
+          {unbilledEntries.length > 0 && (
+            <Button onClick={() => setSelected(new Set(unbilledEntries.map(e => e.id)))} variant="outline" className="gap-2 h-8 text-sm px-3 dark:border-gray-600 dark:text-gray-300">
+              Select All Unbilled
+            </Button>
+          )}
           {entries.length > 0 && canExportCSV && (
             <Button onClick={exportCSV} variant="outline" className="gap-2 h-8 text-sm px-3 dark:border-gray-600 dark:text-gray-300">
               <Download size={15} /> Export CSV

@@ -43,6 +43,7 @@ export default function ClientsPage() {
   const [importing, setImporting] = useState(false);
   const [gstLooking, setGstLooking] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [clientStats, setClientStats] = useState<Record<string, { invoiced: number; outstanding: number }>>({});
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -57,6 +58,24 @@ export default function ClientsPage() {
   }, [supabase, ownerId]);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
+
+  useEffect(() => {
+    fetch("/api/invoices")
+      .then(r => r.json())
+      .then(({ invoices }) => {
+        if (!invoices) return;
+        const stats: Record<string, { invoiced: number; outstanding: number }> = {};
+        for (const inv of invoices) {
+          if (inv.invoice_type === "proforma") continue;
+          const key = (inv.customer_email || inv.customer_name || "").toLowerCase();
+          if (!key) continue;
+          if (!stats[key]) stats[key] = { invoiced: 0, outstanding: 0 };
+          stats[key].invoiced += inv.total;
+          if (inv.status !== "paid") stats[key].outstanding += inv.total - (inv.amount_paid ?? 0);
+        }
+        setClientStats(stats);
+      });
+  }, []);
 
   function openEdit(c: Client) {
     setEditing(c);
@@ -373,6 +392,17 @@ export default function ClientsPage() {
                     {c.gstin && (
                       <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">GSTIN: {c.gstin}</p>
                     )}
+                    {(() => {
+                      const key = (c.email || c.name || "").toLowerCase();
+                      const s = clientStats[key];
+                      if (!s || s.invoiced === 0) return null;
+                      return (
+                        <div className="flex gap-3 mt-2 pt-2 border-t dark:border-gray-700">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">₹{Math.round(s.invoiced).toLocaleString("en-IN")} invoiced</span>
+                          {s.outstanding > 0 && <span className="text-xs text-orange-500 font-medium">₹{Math.round(s.outstanding).toLocaleString("en-IN")} due</span>}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="absolute top-0 right-0 flex items-center gap-1.5">
                     <button

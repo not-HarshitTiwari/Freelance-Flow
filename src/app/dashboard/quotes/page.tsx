@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download, MessageCircle, Mail } from "lucide-react";
+import { Plus, FileSpreadsheet, Trash2, Pencil, Link2, ArrowRightCircle, Search, Download, MessageCircle, Mail, Copy } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { toast } from "sonner";
 import { downloadQuotePdf } from "@/lib/quote-pdf";
@@ -204,6 +204,7 @@ export default function QuotesPage() {
   const [searchQ, setSearchQ] = useState("");
   const [statusF, setStatusF] = useState("all");
   const [converting, setConverting] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
 
   const [selectedClientId, setSelectedClientId] = useState("");
   const [items, setItems] = useState<QuoteItem[]>([{ ...emptyItem }]);
@@ -429,6 +430,42 @@ export default function QuotesPage() {
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to send WhatsApp message"); }
   }
 
+  async function duplicateQuote(q: Quote) {
+    setDuplicating(q.id);
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_name: q.customer_name,
+          customer_email: q.customer_email,
+          customer_phone: q.customer_phone,
+          customer_company: q.customer_company,
+          customer_address: q.customer_address,
+          customer_gstin: q.customer_gstin,
+          items: q.items,
+          gst_type: q.gst_type,
+          gst_rate: q.gst_rate,
+          tax_mode: q.vat_rate != null ? "vat" : "gst",
+          vat_rate: q.vat_rate ?? 0,
+          valid_until: "",
+          notes: q.notes,
+          terms: q.terms,
+          seller_name: q.seller_name,
+          seller_address: q.seller_address,
+          seller_email: q.seller_email,
+          seller_phone: q.seller_phone,
+          seller_gstin: q.seller_gstin,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      toast.success("Quote duplicated");
+      fetchQuotes();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to duplicate"); }
+    finally { setDuplicating(null); }
+  }
+
   async function convertToInvoice(id: string) {
     setConverting(id);
     try {
@@ -576,6 +613,9 @@ export default function QuotesPage() {
                   <Badge className={statusColors[q.status] || ""}>{q.status}</Badge>
                   <button onClick={() => downloadQuotePdf(q)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Download quotation">
                     <Download size={15} />
+                  </button>
+                  <button onClick={() => duplicateQuote(q)} disabled={duplicating === q.id} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Duplicate quote">
+                    <Copy size={15} />
                   </button>
                   <button onClick={() => openEdit(q)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Edit quote">
                     <Pencil size={15} />

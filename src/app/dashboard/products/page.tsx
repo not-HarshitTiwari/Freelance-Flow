@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Package, AlertTriangle, Download, Upload } from "lucide-react";
+import { Plus, Trash2, Pencil, Package, AlertTriangle, Download, Upload, Search } from "lucide-react";
 import { toast } from "sonner";
 
 type Product = {
@@ -36,6 +36,7 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(async () => {
@@ -287,6 +288,17 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {products.length > 0 && (
+        <div className="relative mb-4">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            placeholder="Search by name, type, or HSN/SAC…"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            className="pl-9 h-9 w-full rounded-lg border border-input bg-white dark:bg-gray-900 dark:text-gray-100 text-sm px-3 outline-none"
+          />
+        </div>
+      )}
       {products.length === 0 ? (
         <div className="text-center py-20 text-gray-400 dark:text-gray-600">
           <Package size={48} className="mx-auto mb-4 opacity-30" />
@@ -295,7 +307,7 @@ export default function ProductsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {products.map(p => {
+          {products.filter(p => !searchQ || p.name.toLowerCase().includes(searchQ.toLowerCase()) || p.type.includes(searchQ.toLowerCase()) || (p.hsn_code || "").toLowerCase().includes(searchQ.toLowerCase())).map(p => {
             const outOfStock = p.track_inventory && (p.quantity ?? 0) <= 0;
             const lowStock = p.track_inventory && !outOfStock && (p.quantity ?? 0) <= (p.low_stock_threshold ?? 3);
             return (

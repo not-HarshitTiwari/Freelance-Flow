@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, FileSignature, Trash2, Send, Copy, Eye, Lock } from "lucide-react";
+import { Plus, FileSignature, Trash2, Send, Copy, Eye, Lock, FileDown, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
 import Link from "next/link";
@@ -129,6 +129,37 @@ const statusColors: Record<string, string> = {
   signed: "bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300",
 };
 
+function downloadContractPdf(c: Contract) {
+  // dynamic import to keep bundle lean
+  import("jspdf").then(({ default: jsPDF }) => {
+    const doc = new jsPDF();
+    doc.setFillColor(30, 30, 30);
+    doc.rect(0, 0, 210, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text(c.title, 14, 14);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`Status: ${c.status.toUpperCase()}`, 140, 10);
+    if (c.client_name) doc.text(`Client: ${c.client_name}`, 140, 16);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    const lines = doc.splitTextToSize(c.body, 182);
+    doc.text(lines, 14, 32);
+    if (c.client_signature) {
+      const y = doc.internal.pageSize.height - 30;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(14, y, 210 - 14, y);
+      doc.setFontSize(9);
+      doc.setTextColor(22, 163, 74);
+      doc.text(`E-Signature: ${c.client_signature}`, 14, y + 8);
+      if (c.signed_at) doc.text(`Signed: ${new Date(c.signed_at).toLocaleString("en-IN")}`, 14, y + 15);
+    }
+    doc.save(`${c.title.replace(/\s+/g, "_")}.pdf`);
+  });
+}
+
 export default function ContractsPage() {
   const plan = usePlan();
   const canUseContracts = planAtLeast(plan, "basic");
@@ -196,6 +227,23 @@ export default function ContractsPage() {
     toast.success("Signing link copied!");
   }
 
+  async function remindSigning(contract: Contract) {
+    setSending(contract.id);
+    try {
+      const res = await fetch("/api/contracts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: contract.id, status: "sent" }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const link = `${window.location.origin}/sign/${contract.sign_token}`;
+      await navigator.clipboard.writeText(link);
+      toast.success(contract.client_email ? `Reminder sent to ${contract.client_email} & link copied!` : "Signing link copied!");
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed"); }
+    finally { setSending(null); }
+  }
+
   async function deleteContract(id: string) {
     if (!confirm("Delete this contract?")) return;
     await fetch("/api/contracts", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
@@ -250,9 +298,15 @@ export default function ContractsPage() {
                 <div className="flex items-center gap-2.5">
                   <Badge className={statusColors[c.status] || ""}>{c.status}</Badge>
                   <button onClick={() => setViewContract(c)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Preview"><Eye size={15} /></button>
+                  <button onClick={() => downloadContractPdf(c)} className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-400" title="Download PDF"><FileDown size={15} /></button>
                   {c.status === "draft" && (
                     <button onClick={() => sendForSigning(c)} disabled={sending === c.id} className="text-gray-400 hover:text-blue-600" title="Send for signing">
                       <Send size={15} className={sending === c.id ? "animate-pulse" : ""} />
+                    </button>
+                  )}
+                  {c.status === "sent" && !c.client_signature && (
+                    <button onClick={() => remindSigning(c)} disabled={sending === c.id} className="text-gray-400 hover:text-amber-500" title="Send signing reminder">
+                      <Bell size={15} className={sending === c.id ? "animate-pulse" : ""} />
                     </button>
                   )}
                   {c.status !== "draft" && (
@@ -309,6 +363,9 @@ export default function ContractsPage() {
               {viewContract.client_name && <span className="text-sm text-gray-500 dark:text-gray-400">{viewContract.client_name}</span>}
             </div>
             <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-mono bg-gray-50 dark:bg-gray-900 rounded-lg p-4 leading-relaxed">{viewContract.body}</pre>
+            <Button variant="outline" className="gap-2 dark:border-gray-600 dark:text-gray-300" onClick={() => downloadContractPdf(viewContract)}>
+              <FileDown size={14} /> Download PDF
+            </Button>
             {viewContract.client_signature && (
               <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                 <p className="text-xs text-green-600 dark:text-green-400 font-semibold uppercase mb-1">E-Signature</p>
