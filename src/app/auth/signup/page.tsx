@@ -2,13 +2,12 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Zap } from "lucide-react";
+import { Zap, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 function getStrength(pw: string): { score: number; label: string; color: string } {
@@ -25,11 +24,13 @@ function getStrength(pw: string): { score: number; label: string; color: string 
 }
 
 export default function SignupPage() {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [sentTo, setSentTo] = useState("");
+  const [resending, setResending] = useState(false);
 
   const strength = useMemo(() => getStrength(password), [password]);
 
@@ -46,10 +47,71 @@ export default function SignupPage() {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success("Account created! Please check your email to confirm.");
-      router.push("/dashboard");
+      setSentTo(email);
+      setEmailSent(true);
     }
     setLoading(false);
+  }
+
+  async function handleResend() {
+    setResending(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resend({ type: "signup", email: sentTo });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Verification email resent!");
+    }
+    setResending(false);
+  }
+
+  if (emailSent) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-center gap-2 mb-8 font-bold text-xl text-gray-900 dark:text-white">
+            <Zap className="text-violet-600" size={22} />
+            FreelanceFlow
+          </div>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-3">
+                <div className="rounded-full bg-violet-100 dark:bg-violet-900/30 p-4">
+                  <Mail className="text-violet-600" size={32} />
+                </div>
+              </div>
+              <CardTitle className="dark:text-white">Check your email</CardTitle>
+              <CardDescription className="dark:text-gray-400">
+                We&apos;ve sent a verification link to
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center space-y-4">
+              <p className="font-medium text-gray-900 dark:text-white break-all">{sentTo}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Click the link in the email to verify your account and get started. Check your spam folder if you don&apos;t see it.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                onClick={handleResend}
+                disabled={resending}
+              >
+                {resending ? "Resending..." : "Resend verification email"}
+              </Button>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Wrong email?{" "}
+                <button
+                  onClick={() => setEmailSent(false)}
+                  className="text-violet-600 hover:underline font-medium"
+                >
+                  Go back
+                </button>
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (

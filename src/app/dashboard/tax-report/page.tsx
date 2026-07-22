@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdBanner } from "@/components/ads/AdBanner";
 import { usePlan, planAtLeast } from "@/lib/plan-context";
-import { Download, FileText, IndianRupee, FileSpreadsheet } from "lucide-react";
+import { Download, FileText, IndianRupee, FileSpreadsheet, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 
 type Invoice = {
   invoice_number: string; invoice_date: string; customer_name: string; customer_gstin: string | null;
   subtotal: number; gst_rate: number; tax: number | null; cgst: number | null; sgst: number | null;
   igst: number | null; total: number; gst_type: string; status: string;
+  amount_paid?: number | null; due_date?: string | null; invoice_type?: string | null;
 };
 
 type Expense = { title: string; amount: number; category: string; date: string };
@@ -193,6 +194,137 @@ export default function TaxReportPage() {
     toast.success("Accounting export downloaded!");
   }
 
+  // General Ledger: transactions grouped by account with opening/closing balances per account
+  function downloadLedgerReport() {
+    const label = `${QUARTERS[quarter].label} ${year}`;
+    const generated = new Date().toLocaleDateString("en-IN");
+    const rows: (string | number)[][] = [
+      [`General Ledger Report — ${label}`],
+      [`Generated: ${generated}`],
+      [`Note: Opening balances shown as 0 — prior-period balances are not stored in this system.`],
+    ];
+
+    const TXCOLS = ["Date", "Reference No.", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
+
+    // Helper: render one account block into rows
+    function accountBlock(
+      name: string,
+      code: string,
+      txns: { date: string; ref: string; desc: string; debit: number; credit: number }[]
+    ) {
+      const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date));
+      let balance = 0;
+      rows.push([], [`Account: ${name}`, `Account No.: ${code}`]);
+      rows.push(["Opening Balance", "", "", "", "", 0]);
+      rows.push(TXCOLS);
+      for (const t of sorted) {
+        balance += t.debit - t.credit;
+        rows.push([t.date, t.ref, t.desc, t.debit || "", t.credit || "", balance]);
+      }
+      rows.push(["Closing Balance", "", "", "", "", balance]);
+    }
+
+    const activeInvoices = filtered.filter(i => i.invoice_type !== "proforma" && i.status !== "cancelled" && i.status !== "draft");
+
+    // ── 1100  Accounts Receivable ──────────────────────────────────────────────
+    // Dr: invoice total when issued  |  Cr: amount received
+    {
+      const txns: { date: string; ref: string; desc: string; debit: number; credit: number }[] = [];
+      for (const inv of activeInvoices) {
+        const amtPaid = inv.amount_paid ?? (inv.status === "paid" ? inv.total : 0);
+        txns.push({ date: inv.invoice_date, ref: inv.invoice_number, desc: `Invoice — ${inv.customer_name}`, debit: inv.total, credit: 0 });
+        if (amtPaid > 0) txns.push({ date: inv.invoice_date, ref: inv.invoice_number, desc: `Payment received — ${inv.customer_name}`, debit: 0, credit: amtPaid });
+      }
+      accountBlock("Accounts Receivable", "1100", txns);
+    }
+
+    // ── 1000  Cash / Bank ──────────────────────────────────────────────────────
+    // Dr: payments received from clients  |  Cr: expenses paid out
+    {
+      const txns: { date: string; ref: string; desc: string; debit: number; credit: number }[] = [];
+      for (const inv of activeInvoices) {
+        const amtPaid = inv.amount_paid ?? (inv.status === "paid" ? inv.total : 0);
+        if (amtPaid > 0) txns.push({ date: inv.invoice_date, ref: inv.invoice_number, desc: `Receipt — ${inv.customer_name}`, debit: amtPaid, credit: 0 });
+      }
+      filteredExpenses.forEach((exp, i) => {
+        txns.push({ date: exp.date, ref: `EXP-${String(i + 1).padStart(3, "0")}`, desc: `${exp.title} (${exp.category})`, debit: 0, credit: exp.amount });
+      });
+      accountBlock("Cash / Bank", "1000", txns);
+    }
+
+    // ── 4000  Sales Revenue ────────────────────────────────────────────────────
+    // Cr: taxable value of each invoice (revenue before GST)
+    {
+      const txns = activeInvoices.map(inv => ({
+        date: inv.invoice_date, ref: inv.invoice_number,
+        desc: `Sales — ${inv.customer_name}`, debit: 0, credit: inv.subtotal,
+      }));
+      accountBlock("Sales Revenue", "4000", txns);
+    }
+
+    // ── 2100 / 2200 / 2300  GST Payable ───────────────────────────────────────
+    // Cr: GST collected (liability to remit to govt)
+    const hasCGST = activeInvoices.some(i => (i.cgst ?? 0) > 0);
+    const hasSGST = activeInvoices.some(i => (i.sgst ?? 0) > 0);
+    const hasIGST = activeInvoices.some(i => (i.igst ?? 0) > 0);
+    if (hasCGST) accountBlock("Output CGST Payable", "2100", activeInvoices.filter(i => (i.cgst ?? 0) > 0).map(inv => ({ date: inv.invoice_date, ref: inv.invoice_number, desc: `CGST on ${inv.invoice_number}`, debit: 0, credit: inv.cgst ?? 0 })));
+    if (hasSGST) accountBlock("Output SGST Payable", "2200", activeInvoices.filter(i => (i.sgst ?? 0) > 0).map(inv => ({ date: inv.invoice_date, ref: inv.invoice_number, desc: `SGST on ${inv.invoice_number}`, debit: 0, credit: inv.sgst ?? 0 })));
+    if (hasIGST) accountBlock("Output IGST Payable", "2300", activeInvoices.filter(i => (i.igst ?? 0) > 0).map(inv => ({ date: inv.invoice_date, ref: inv.invoice_number, desc: `IGST on ${inv.invoice_number}`, debit: 0, credit: inv.igst ?? 0 })));
+
+    // ── 5xxx  Expense Accounts (one per category) ──────────────────────────────
+    // Dr: expense amount
+    const expByCategory = new Map<string, typeof filteredExpenses>();
+    filteredExpenses.forEach((exp, i) => {
+      const cat = exp.category || "Other";
+      if (!expByCategory.has(cat)) expByCategory.set(cat, []);
+      expByCategory.get(cat)!.push(exp);
+    });
+    const categoryCode: Record<string, string> = {
+      Software: "5100", Hardware: "5200", Marketing: "5300", Travel: "5400",
+      Office: "5500", Freelancer: "5600", Tax: "5700", Other: "5800",
+    };
+    let expIdx = 0;
+    for (const [cat, exps] of expByCategory) {
+      const code = categoryCode[cat] ?? "5900";
+      accountBlock(`${cat} Expense`, code, exps.map(exp => ({
+        date: exp.date,
+        ref: `EXP-${String(++expIdx).padStart(3, "0")}`,
+        desc: exp.title,
+        debit: exp.amount,
+        credit: 0,
+      })));
+    }
+
+    // ── Trial Balance summary ──────────────────────────────────────────────────
+    const totalInvoiced = activeInvoices.reduce((s, i) => s + i.total, 0);
+    const totalReceived = activeInvoices.reduce((s, i) => s + (i.amount_paid ?? (i.status === "paid" ? i.total : 0)), 0);
+    const totalRevenue = activeInvoices.reduce((s, i) => s + i.subtotal, 0);
+    const totalGST = activeInvoices.reduce((s, i) => s + (i.tax ?? ((i.cgst ?? 0) + (i.sgst ?? 0) + (i.igst ?? 0))), 0);
+    const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+    rows.push(
+      [], [],
+      ["── TRIAL BALANCE SUMMARY ──"],
+      ["Account", "Account No.", "Total Debits (₹)", "Total Credits (₹)"],
+      ["Accounts Receivable", "1100", totalInvoiced, totalReceived],
+      ["Cash / Bank", "1000", totalReceived, totalExpenses],
+      ["Sales Revenue", "4000", "", totalRevenue],
+      ...(hasCGST ? [["Output CGST Payable", "2100", "", activeInvoices.reduce((s, i) => s + (i.cgst ?? 0), 0)]] : []),
+      ...(hasSGST ? [["Output SGST Payable", "2200", "", activeInvoices.reduce((s, i) => s + (i.sgst ?? 0), 0)]] : []),
+      ...(hasIGST ? [["Output IGST Payable", "2300", "", activeInvoices.reduce((s, i) => s + (i.igst ?? 0), 0)]] : []),
+      [...Array.from(expByCategory.keys()).map(cat => [`${cat} Expense`, categoryCode[cat] ?? "5900", expByCategory.get(cat)!.reduce((s, e) => s + e.amount, 0), ""])].flat(),
+      [],
+      ["Net Revenue (Sales − Expenses)", "", "", totalRevenue - totalExpenses],
+      ["Outstanding Receivables", "", "", totalInvoiced - totalReceived],
+      ["Total GST Liability", "", "", totalGST],
+    );
+
+    downloadFile(
+      rows.map(r => r.map(v => csvEscape(v == null ? "" : v)).join(",")).join("\n"),
+      `General-Ledger-${label.replace(/[^A-Za-z0-9]/g, "-")}.csv`
+    );
+    toast.success("General ledger downloaded!");
+  }
+
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 
   return (
@@ -208,6 +340,9 @@ export default function TaxReportPage() {
               <FileSpreadsheet size={16} /> Export for Accounting Software
             </Button>
           )}
+          <Button onClick={downloadLedgerReport} variant="outline" className="gap-2" title="Chronological ledger of all invoices & expenses with running balance">
+            <BookOpen size={16} /> Export Ledger Report
+          </Button>
           <Button onClick={downloadGSTR1CSV} variant="outline" className="gap-2" title="B2B + B2C(Small) summary in the GSTR-1 offline tool column layout">
             <FileText size={16} /> Export GSTR-1
           </Button>

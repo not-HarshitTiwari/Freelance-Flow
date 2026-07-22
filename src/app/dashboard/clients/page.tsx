@@ -29,6 +29,72 @@ const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const emptyForm = { name: "", email: "", phone: "", company: "", address: "", gstin: "" };
 
+function ClientForm({ f, setF, onSubmit, submitLabel, gstLooking, lookupGST, saving }: {
+  f: typeof emptyForm;
+  setF: (v: typeof emptyForm) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  submitLabel: string;
+  gstLooking: boolean;
+  lookupGST: (gstin: string, setF: (v: typeof emptyForm) => void, currentForm: typeof emptyForm) => void;
+  saving: boolean;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      {/* GSTIN with autofill — put at top so it can pre-fill other fields */}
+      <div className="space-y-2">
+        <Label>GSTIN</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="22AAAAA0000A1Z5"
+            value={f.gstin}
+            maxLength={15}
+            className="uppercase"
+            onChange={e => setF({ ...f, gstin: e.target.value.toUpperCase() })}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 dark:border-gray-600 dark:text-gray-300"
+            disabled={gstLooking || !GSTIN_RE.test(f.gstin)}
+            onClick={() => lookupGST(f.gstin, setF, f)}
+          >
+            {gstLooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+          </Button>
+        </div>
+        {f.gstin.length > 0 && f.gstin.length < 15 && (
+          <p className="text-xs text-gray-400">GSTIN must be 15 characters</p>
+        )}
+        {f.gstin.length === 15 && !GSTIN_RE.test(f.gstin) && (
+          <p className="text-xs text-red-500">Invalid GSTIN format</p>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>Full Name *</Label>
+        <Input placeholder="Rahul Sharma" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Email *</Label>
+        <Input type="email" placeholder="rahul@company.com" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Phone</Label>
+        <Input placeholder="+91 98765 43210" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Company</Label>
+        <Input placeholder="ABC Technologies" value={f.company} onChange={e => setF({ ...f, company: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label>Address</Label>
+        <Input placeholder="Delhi, India" value={f.address} onChange={e => setF({ ...f, address: e.target.value })} />
+      </div>
+      <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
+        {saving ? "Saving..." : submitLabel}
+      </Button>
+    </form>
+  );
+}
+
 export default function ClientsPage() {
   const plan = usePlan();
   const { ownerId } = useWorkspace();
@@ -243,67 +309,6 @@ export default function ClientsPage() {
     }
   }
 
-  const ClientForm = ({ f, setF, onSubmit, submitLabel }: {
-    f: typeof emptyForm;
-    setF: (v: typeof emptyForm) => void;
-    onSubmit: (e: React.FormEvent) => void;
-    submitLabel: string;
-  }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      {/* GSTIN with autofill — put at top so it can pre-fill other fields */}
-      <div className="space-y-2">
-        <Label>GSTIN</Label>
-        <div className="flex gap-2">
-          <Input
-            placeholder="22AAAAA0000A1Z5"
-            value={f.gstin}
-            maxLength={15}
-            className="uppercase"
-            onChange={e => setF({ ...f, gstin: e.target.value.toUpperCase() })}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0 dark:border-gray-600 dark:text-gray-300"
-            disabled={gstLooking || !GSTIN_RE.test(f.gstin)}
-            onClick={() => lookupGST(f.gstin, setF, f)}
-          >
-            {gstLooking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
-          </Button>
-        </div>
-        {f.gstin.length > 0 && f.gstin.length < 15 && (
-          <p className="text-xs text-gray-400">GSTIN must be 15 characters</p>
-        )}
-        {f.gstin.length === 15 && !GSTIN_RE.test(f.gstin) && (
-          <p className="text-xs text-red-500">Invalid GSTIN format</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label>Full Name *</Label>
-        <Input placeholder="Rahul Sharma" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required />
-      </div>
-      <div className="space-y-2">
-        <Label>Email *</Label>
-        <Input type="email" placeholder="rahul@company.com" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required />
-      </div>
-      <div className="space-y-2">
-        <Label>Phone</Label>
-        <Input placeholder="+91 98765 43210" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
-      </div>
-      <div className="space-y-2">
-        <Label>Company</Label>
-        <Input placeholder="ABC Technologies" value={f.company} onChange={e => setF({ ...f, company: e.target.value })} />
-      </div>
-      <div className="space-y-2">
-        <Label>Address</Label>
-        <Input placeholder="Delhi, India" value={f.address} onChange={e => setF({ ...f, address: e.target.value })} />
-      </div>
-      <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={saving}>
-        {saving ? "Saving..." : submitLabel}
-      </Button>
-    </form>
-  );
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -343,7 +348,7 @@ export default function ClientsPage() {
               <DialogHeader>
                 <DialogTitle>Add New Client</DialogTitle>
               </DialogHeader>
-              <ClientForm f={form} setF={setForm} onSubmit={handleAdd} submitLabel="Add Client" />
+              <ClientForm f={form} setF={setForm} onSubmit={handleAdd} submitLabel="Add Client" gstLooking={gstLooking} lookupGST={lookupGST} saving={saving} />
             </DialogContent>
           </Dialog>
         </div>
@@ -355,7 +360,7 @@ export default function ClientsPage() {
           <DialogHeader>
             <DialogTitle>Edit Client</DialogTitle>
           </DialogHeader>
-          <ClientForm f={editForm} setF={setEditForm} onSubmit={handleEdit} submitLabel="Save Changes" />
+          <ClientForm f={editForm} setF={setEditForm} onSubmit={handleEdit} submitLabel="Save Changes" gstLooking={gstLooking} lookupGST={lookupGST} saving={saving} />
         </DialogContent>
       </Dialog>
 
