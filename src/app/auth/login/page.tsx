@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Zap, ShieldCheck } from "lucide-react";
+import { Zap, ShieldCheck, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -16,17 +16,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      toast.error(error.message);
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      const msg = authError.message.toLowerCase();
+      setError(
+        msg.includes("invalid") || msg.includes("credentials") || msg.includes("password")
+          ? "Incorrect email or password. Please try again."
+          : authError.message
+      );
       setLoading(false);
       return;
     }
@@ -49,11 +57,12 @@ export default function LoginPage() {
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
     if (!factorId) return;
+    setOtpError(null);
     setVerifying(true);
     const supabase = createClient();
     const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
     if (challengeError || !challenge) {
-      toast.error(challengeError?.message || "Failed to start verification");
+      setOtpError(challengeError?.message || "Failed to start verification");
       setVerifying(false);
       return;
     }
@@ -63,7 +72,7 @@ export default function LoginPage() {
       code: otpCode,
     });
     if (verifyError) {
-      toast.error(verifyError.message);
+      setOtpError("Invalid code. Please check your authenticator app and try again.");
       setVerifying(false);
       return;
     }
@@ -102,8 +111,18 @@ export default function LoginPage() {
                   />
                 </div>
                 <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={verifying || otpCode.length !== 6}>
-                  {verifying ? "Verifying..." : "Verify & Sign In"}
+                  {verifying ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 size={15} className="animate-spin" /> Verifying…
+                    </span>
+                  ) : "Verify & Sign In"}
                 </Button>
+                {otpError && (
+                  <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-700 dark:text-red-400">
+                    <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                    {otpError}
+                  </div>
+                )}
               </form>
             </CardContent>
           </Card>
@@ -156,8 +175,18 @@ export default function LoginPage() {
                 />
               </div>
               <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white" disabled={loading}>
-                {loading ? "Signing in..." : "Sign In"}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={15} className="animate-spin" /> Signing in…
+                  </span>
+                ) : "Sign In"}
               </Button>
+              {error && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2.5 text-sm text-red-700 dark:text-red-400">
+                  <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                  {error}
+                </div>
+              )}
             </form>
             <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
               Don&apos;t have an account?{" "}
